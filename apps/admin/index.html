@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Operations</title>
+    <script>
+      try {
+        if (localStorage.getItem("ops.nav.collapsed") === "1" && matchMedia("(min-width: 960px)").matches) {
+          document.documentElement.dataset.nav = "collapsed";
+        }
+      } catch (error) {
+        /* Preference storage is optional. */
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

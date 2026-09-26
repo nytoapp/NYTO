@@ -1,0 +1,46 @@
+{
+  "name": "@atlas/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "migrate": "tsx --env-file=../../.env src/shared/db/migrate.ts",
+    "seed": "tsx --env-file=../../.env src/shared/db/seed.ts"
+  },
+  "dependencies": {
+    "@atlas/config": "workspace:*",
+    "@atlas/contracts": "workspace:*",
+    "@nestjs/common": "^12.0.0",
+    "@nestjs/core": "^12.0.0",
+    "@nestjs/platform-express": "^12.0.0",
+    "@nestjs/throttler": "^6.4.0",
+    "drizzle-orm": "^0.45.1",
+    "google-auth-library": "^10.3.0",
+    "hash-wasm": "^4.12.0",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.8.1",
+    "jose": "^6.1.0",
+    "luxon": "^3.7.2",
+    "pg": "^8.16.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^12.0.0",
+    "@types/express": "^5.0.3",
+    "@types/luxon": "^3.7.1",
+    "@types/node": "^24.5.2",
+    "@types/pg": "^8.15.5",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.5",
+    "typescript": "~6.0.3",
+    "unplugin-swc": "^1.5.5",
+    "vitest": "^3.2.4"
+  }
+}

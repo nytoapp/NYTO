@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Atlas",
+    "slug": "atlas",
+    "scheme": "atlas",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": ["expo-router", "expo-localization", "expo-secure-store"],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "ios": {
+      "bundleIdentifier": "com.atlas.discovery",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.atlas.discovery"
+    }
+  }
+}

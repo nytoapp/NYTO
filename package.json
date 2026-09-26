@@ -1,0 +1,28 @@
+{
+  "name": "atlas",
+  "private": true,
+  "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "lint": "eslint .",
+    "dev:api": "pnpm --filter @atlas/api dev",
+    "dev:admin": "pnpm --filter @atlas/admin dev",
+    "dev:mobile": "pnpm --filter @atlas/mobile start",
+    "migrate": "pnpm --filter @atlas/api migrate",
+    "seed": "pnpm --filter @atlas/api seed"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@swc/core", "esbuild"]
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "eslint": "^9.36.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.44.0"
+  }
+}

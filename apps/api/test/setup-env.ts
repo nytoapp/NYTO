@@ -1,0 +1,10 @@
+process.env.NODE_ENV = "test";
+process.env.DATABASE_URL ??= "postgres://atlas:atlas@127.0.0.1:59999/atlas";
+process.env.REDIS_URL ??= "redis://127.0.0.1:59998";
+process.env.AUTH_JWT_SECRET ??= "test-jwt-secret-with-32-characters";
+process.env.AUTH_REFRESH_PEPPER ??= "test-refresh-pepper";
+process.env.AUTH_DESTINATION_SECRET ??= "test-destination-secret-32-characters";
+process.env.FIXTURE_PROVIDER_ENABLED ??= "true";
+process.env.AUTH_LOG_DEV_OTP ??= "false";
+process.env.CORS_ORIGINS ??= "http://localhost:8081";
+process.env.PHONE_COUNTRY_ALLOWLIST ??= "1";
