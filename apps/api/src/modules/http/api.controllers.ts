@@ -29,6 +29,7 @@ import { DestinationsService } from "../destinations/destinations.service";
 import { LibraryService } from "../library/library.service";
 import { TripsService } from "../trips/trips.service";
 import { HomeService } from "../editorial/home.service";
+import { loadSubjectDetail } from "../catalog/facts";
 import { AdminOverviewService } from "../admin/overview.service";
 
 function parseBody<T>(schema: ZodType<T>, body: unknown): T {
@@ -209,31 +210,11 @@ export class SubjectsController {
 
   @Get(":id")
   async get(@Req() request: Request, @Param("id") id: string, @Query("locale") locale = "en") {
-    const result = await this.database.pool.query(
-      `select s.id, s.kind, s.default_locale, t.name, t.summary, p.country_code, p.timezone,
-              ST_Y(p.geog::geometry) as latitude, ST_X(p.geog::geometry) as longitude
-       from catalog_subjects s
-       left join subject_translations t on t.subject_id = s.id and t.locale = $2
-       left join places p on p.subject_id = s.id
-       where s.id = $1 and s.deleted_at is null and s.status = 'active'`,
-      [id, locale],
-    );
-    const row = result.rows[0];
-    if (!row) {
+    const detail = await loadSubjectDetail(this.database.pool, id, locale);
+    if (!detail) {
       throw new AppError(ErrorCodes.NOT_FOUND, "That item is no longer available.", 404);
     }
-    return envelope(request, {
-      id: String(row.id),
-      kind: row.kind,
-      title: row.name ? String(row.name) : "Untitled",
-      summary: row.summary ? String(row.summary) : null,
-      locale,
-      countryCode: row.country_code ? String(row.country_code).trim() : null,
-      timezone: row.timezone ? String(row.timezone) : null,
-      location: row.latitude === null || row.longitude === null ? null : { latitude: Number(row.latitude), longitude: Number(row.longitude) },
-      factSource: "catalog",
-      attribution: [],
-    });
+    return envelope(request, detail);
   }
 }
 
@@ -298,6 +279,11 @@ export class TripsController {
   @Get()
   async list(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>) {
     return envelope(request, { items: await this.trips.list(user.userId) });
+  }
+
+  @Get(":id")
+  async get(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>, @Param("id") id: string) {
+    return envelope(request, await this.trips.get(user.userId, id));
   }
 
   @Post()

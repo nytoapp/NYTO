@@ -40,9 +40,13 @@ export {
   saveRequestSchema,
   searchRequestSchema,
   searchResponseSchema,
+  catalogBookingSchema,
+  catalogImageSchema,
+  catalogPriceSchema,
   searchResultSchema,
   subjectDetailSchema,
   tripCreateRequestSchema,
+  tripDetailSchema,
   tripItemRequestSchema,
   type AuthSession,
   type DestinationResolveResponse,
@@ -52,6 +56,7 @@ export {
   type SearchResponse,
   type SearchResult,
   type SubjectDetail,
+  type TripDetail,
 } from "./api";
 export { adminMetricSchema, adminOverviewSchema, type AdminMetric, type AdminOverview } from "./admin";
 export {

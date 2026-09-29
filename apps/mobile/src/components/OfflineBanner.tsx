@@ -20,8 +20,8 @@ export function OfflineBanner() {
     return null;
   }
   return (
-    <View style={[styles.bar, { backgroundColor: colors.ink, paddingTop: insets.top + 6 }]}>
-      <AppText role="caption" tone="inverse">
+    <View style={[styles.bar, { backgroundColor: colors.paper, paddingTop: insets.top + 6 }]}>
+      <AppText role="caption" tone="onPaper">
         {t("offline")}
       </AppText>
     </View>
@@ -31,3 +31,8 @@ export function OfflineBanner() {
 const styles = StyleSheet.create({
   bar: { paddingBottom: 8, paddingHorizontal: 16 },
 });
+
+
+
+
+

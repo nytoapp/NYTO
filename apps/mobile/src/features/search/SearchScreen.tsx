@@ -3,8 +3,9 @@ import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View }
 import { useFocusEffect, useRouter } from "expo-router";
 import type { SearchResult } from "@atlas/contracts";
 import { CategoryCard, DestinationChip, Rail, SearchResultCard, SectionHeader } from "../../components/discovery";
-import { AppText, Chip, EmptyState, ErrorState, Screen, SearchField, Skeleton } from "../../components/ui";
+import { AppText, Chip, EmptyState, ErrorState, ListRow, Screen, SearchField, Skeleton } from "../../components/ui";
 import { space } from "../../components/theme/tokens";
+import { friendlyError } from "../../lib/errors";
 import { browseCategories, destinations, isCatalogId, popularSearches } from "../discovery/browse";
 import { useDiscoveryLocation } from "../location/location-store";
 import { useSearchHandoff } from "./handoff";
@@ -68,9 +69,18 @@ export function SearchScreen() {
     <Screen>
       <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.top}>
-          <SearchField value={query} onChangeText={setQuery} placeholder="Search places, events, food" onSubmit={() => run(query)} />
+          {submitted ? null : (
+            <View style={styles.mast}>
+              <AppText role="brand" tone="tertiary">
+                CITYDAY
+              </AppText>
+              <AppText role="title">Search</AppText>
+              <AppText tone="muted">What are you looking for?</AppText>
+            </View>
+          )}
+          <SearchField value={query} onChangeText={setQuery} placeholder="Search the city" onSubmit={() => run(query)} />
         </View>
-        {submitted ? (
+        {submitted && !search.isError ? (
           <FlatList
             data={results}
             keyExtractor={(item) => `${item.factSource}:${item.id}`}
@@ -79,7 +89,7 @@ export function SearchScreen() {
             ListHeaderComponent={
               <View style={styles.headerBlock}>
                 <View style={styles.metaRow}>
-                  <AppText role="label">{search.isPending ? "Searching" : `${results.length} results`}</AppText>
+                  <AppText role="label">{search.isPending ? "Searching" : "Places"}</AppText>
                   <Pressable accessibilityRole="button" accessibilityLabel="Sort results" onPress={() => setSort((current) => (current === "suggested" ? "name" : "suggested"))}>
                     <AppText role="label" tone="accent">
                       {sort === "suggested" ? "Suggested" : "Name"}
@@ -101,15 +111,16 @@ export function SearchScreen() {
                     ))}
                   </Rail>
                 ) : null}
-                {warnings.map((warning) => (
-                  <AppText key={warning.code} role="caption" tone="muted">
-                    {warning.message}
-                  </AppText>
-                ))}
+                {warnings.map((warning) => {
+                  const message = friendlyError(new Error(warning.message), "");
+                  if (!message) return null;
+                  return (
+                    <AppText key={warning.code} role="caption" tone="muted">
+                      {message}
+                    </AppText>
+                  );
+                })}
                 {search.isPending ? <Skeleton height={180} /> : null}
-                {search.isError ? (
-                  <ErrorState title="Search could not finish" body={search.error instanceof Error ? search.error.message : "Try again."} onRetry={() => run(submitted)} />
-                ) : null}
               </View>
             }
             ListEmptyComponent={
@@ -129,6 +140,9 @@ export function SearchScreen() {
             keyboardShouldPersistTaps="handled"
             ListHeaderComponent={
               <View style={styles.idle}>
+                {search.isError ? (
+                  <ErrorState title="Nothing came through." body="Give it another try. The ideas below still work." onRetry={() => run(submitted)} />
+                ) : null}
                 {recent.length > 0 ? (
                   <View>
                     <SectionHeader title="Recent" />
@@ -140,12 +154,10 @@ export function SearchScreen() {
                   </View>
                 ) : null}
                 <View>
-                  <SectionHeader title="Popular" />
-                  <Rail>
-                    {popularSearches.map((item) => (
-                      <Chip key={item} label={item} onPress={() => run(item)} />
-                    ))}
-                  </Rail>
+                  <SectionHeader title="Ideas" />
+                  {popularSearches.map((item) => (
+                    <ListRow key={item} title={item} onPress={() => run(item)} />
+                  ))}
                 </View>
                 <View>
                   <SectionHeader title="Categories" />
@@ -179,7 +191,8 @@ export function SearchScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  top: { paddingTop: space[2], paddingBottom: space[3] },
+  top: { paddingTop: space[2], paddingBottom: space[3], gap: space[3] },
+  mast: { gap: 4 },
   list: { paddingBottom: space[8], gap: space[3] },
   headerBlock: { gap: space[3], marginBottom: space[3] },
   metaRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

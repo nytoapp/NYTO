@@ -1,5 +1,5 @@
 import * as SecureStore from "expo-secure-store";
-import type { ApiEnvelope } from "@atlas/contracts";
+import type { ApiEnvelope, ApiFailure } from "@atlas/contracts";
 import { apiBaseUrl, requestTimeoutMs } from "../config/env";
 
 const TOKEN_KEY = "atlas.accessToken";
@@ -30,6 +30,18 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     const response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers, signal: controller.signal });
     const body = (await response.json()) as ApiEnvelope<T>;
     return body;
+  } catch {
+    const failure: ApiFailure = {
+      data: null,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "We couldn't connect right now.",
+        retryable: true,
+        requestId: "unavailable",
+      },
+      meta: { requestId: "unavailable", correlationId: "unavailable", nextCursor: null, warnings: [] },
+    };
+    return failure;
   } finally {
     clearTimeout(timer);
   }

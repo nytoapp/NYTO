@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -12,17 +12,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { hitTarget, pageInset, radius, space, type as typeScale } from "./theme/tokens";
+import { hitTarget, pageInset, radius, space, type, typeStyle } from "./theme/tokens";
 import { useTheme } from "./theme/ThemeProvider";
-
-const weight: Record<keyof typeof typeScale, "400" | "500" | "600" | "700"> = {
-  display: "700",
-  title: "700",
-  headline: "600",
-  body: "400",
-  label: "600",
-  caption: "500",
-};
 
 export function AppText({
   children,
@@ -31,19 +22,27 @@ export function AppText({
   numberOfLines,
 }: {
   children: ReactNode;
-  role?: keyof typeof typeScale;
-  tone?: "ink" | "muted" | "accent" | "inverse" | "clay";
+  role?: keyof typeof type;
+  tone?: "ink" | "muted" | "accent" | "inverse" | "clay" | "onPaper" | "tertiary";
   numberOfLines?: number;
 }) {
   const colors = useTheme();
   const color =
-    tone === "muted" ? colors.muted : tone === "accent" ? colors.accent : tone === "inverse" ? colors.accentInk : tone === "clay" ? colors.clay : colors.ink;
+    tone === "muted"
+      ? colors.secondaryText
+      : tone === "tertiary"
+        ? colors.tertiaryText
+        : tone === "accent"
+          ? colors.accent
+          : tone === "inverse"
+            ? colors.primaryText
+            : tone === "onPaper"
+              ? colors.paperInk
+              : tone === "clay"
+                ? colors.error
+                : colors.primaryText;
   return (
-    <Text
-      allowFontScaling
-      numberOfLines={numberOfLines}
-      style={{ color, fontSize: typeScale[role], lineHeight: Math.round(typeScale[role] * 1.3), fontWeight: weight[role] }}
-    >
+    <Text allowFontScaling numberOfLines={numberOfLines} style={[typeStyle(role), { color }]}>
       {children}
     </Text>
   );
@@ -66,20 +65,27 @@ export function Button({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
         {
-          backgroundColor: primary ? colors.accent : colors.surface,
-          borderColor: primary ? colors.accent : colors.line,
-          opacity: disabled ? 0.5 : pressed ? 0.88 : 1,
+          backgroundColor: disabled ? colors.surfacePressed : primary ? colors.paper : "transparent",
+          borderColor: disabled ? colors.border : primary ? colors.paper : colors.border,
+          transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
         },
       ]}
     >
-      <AppText role="label" tone={primary ? "inverse" : "ink"}>
+      <Text
+        allowFontScaling
+        style={[
+          typeStyle("label"),
+          { color: disabled ? colors.tertiaryText : primary ? colors.paperInk : colors.primaryText },
+        ]}
+      >
         {label}
-      </AppText>
+      </Text>
     </Pressable>
   );
 }
@@ -91,9 +97,9 @@ export function IconButton({ label, onPress, glyph }: { label: string; onPress: 
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => [styles.icon, { backgroundColor: colors.surface, borderColor: colors.line, opacity: pressed ? 0.8 : 1 }]}
+      style={({ pressed }) => [styles.icon, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
     >
-      {glyph.length <= 2 ? <AppText role="label">{glyph}</AppText> : <Ionicons name="person-circle-outline" size={22} color={colors.ink} />}
+      {glyph.length <= 2 ? <AppText role="label">{glyph}</AppText> : <Ionicons name="person-outline" size={20} color={colors.primaryText} />}
     </Pressable>
   );
 }
@@ -109,13 +115,13 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
       style={({ pressed }) => [
         styles.chip,
         {
-          backgroundColor: selected ? colors.accent : colors.surface,
-          borderColor: selected ? colors.accent : colors.line,
-          opacity: pressed ? 0.85 : 1,
+          backgroundColor: selected ? colors.surfaceSelected : "transparent",
+          borderColor: selected ? colors.accent : colors.border,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
         },
       ]}
     >
-      <AppText role="label" tone={selected ? "inverse" : "ink"}>
+      <AppText role="label" tone={selected ? "accent" : "ink"}>
         {label}
       </AppText>
     </Pressable>
@@ -133,7 +139,7 @@ export function SegmentedControl({
 }) {
   const colors = useTheme();
   return (
-    <View accessibilityRole="tablist" style={[styles.segment, { backgroundColor: colors.accentSoft }]}>
+    <View accessibilityRole="tablist" style={[styles.segment, { backgroundColor: colors.surface }]}>
       {options.map((option) => {
         const selected = option.id === value;
         return (
@@ -143,9 +149,9 @@ export function SegmentedControl({
             accessibilityState={{ selected }}
             accessibilityLabel={option.label}
             onPress={() => onChange(option.id)}
-            style={[styles.segmentItem, { backgroundColor: selected ? colors.surface : "transparent" }]}
+            style={[styles.segmentItem, { backgroundColor: selected ? colors.elevatedSurface : "transparent" }]}
           >
-            <AppText role="caption" tone={selected ? "ink" : "muted"}>
+            <AppText role="caption" tone={selected ? "ink" : "tertiary"}>
               {option.label}
             </AppText>
           </Pressable>
@@ -175,41 +181,60 @@ export function SearchField({
   keyboardType?: TextInputProps["keyboardType"];
 }) {
   const colors = useTheme();
+  const [focused, setFocused] = useState(false);
+  const [hidden, setHidden] = useState(true);
   return (
-    <View style={[styles.fieldWrap, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-      {hideIcon ? null : <Ionicons name="search" size={18} color={colors.muted} />}
+    <View
+      style={[
+        styles.fieldWrap,
+        {
+          backgroundColor: focused ? colors.surfaceSelected : colors.surface,
+          borderColor: focused ? colors.primaryText : colors.border,
+        },
+      ]}
+    >
+      {hideIcon ? null : <Ionicons name="search-outline" size={18} color={focused ? colors.primaryText : colors.tertiaryText} />}
       <TextInput
         accessibilityLabel={placeholder}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.muted}
-        returnKeyType="search"
+        placeholderTextColor={colors.tertiaryText}
+        returnKeyType={secure ? "done" : "search"}
         onSubmitEditing={onSubmit}
-        secureTextEntry={secure}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        secureTextEntry={secure ? hidden : false}
         autoCapitalize={autoCapitalize ?? (secure ? "none" : "sentences")}
         autoCorrect={false}
         keyboardType={keyboardType}
-        style={[styles.field, { color: colors.ink }]}
+        style={[styles.field, typeStyle("body"), { color: colors.primaryText }]}
       />
+      {secure ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={hidden ? "Show password" : "Hide password"} onPress={() => setHidden((current) => !current)} hitSlop={8}>
+          <Ionicons name={hidden ? "eye-outline" : "eye-off-outline"} size={18} color={colors.secondaryText} />
+        </Pressable>
+      ) : value.length > 0 ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Clear" onPress={() => onChangeText("")} hitSlop={8}>
+          <Ionicons name="close" size={16} color={colors.secondaryText} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const colors = useTheme();
-  return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line, shadowColor: colors.shadow }, style]}>{children}</View>
-  );
+  return <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.divider }, style]}>{children}</View>;
 }
 
 export function ListRow({ title, meta, onPress }: { title: string; meta?: string; onPress?: () => void }) {
   const colors = useTheme();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={[styles.row, { borderBottomColor: colors.line }]}>
-      <AppText role="headline">{title}</AppText>
+    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={[styles.row, { borderBottomColor: colors.divider }]}>
+      <AppText role="bodyLarge">{title}</AppText>
       {meta ? (
-        <AppText role="caption" tone="muted">
+        <AppText role="caption" tone="tertiary">
           {meta}
         </AppText>
       ) : null}
@@ -221,9 +246,9 @@ export function Sheet({ visible, onClose, children }: { visible: boolean; onClos
   const colors = useTheme();
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable accessibilityLabel="Close" style={[styles.scrim, { backgroundColor: colors.scrim }]} onPress={onClose} />
-      <SafeAreaView edges={["bottom"]} style={[styles.sheet, { backgroundColor: colors.surface }]}>
-        <View style={[styles.handle, { backgroundColor: colors.line }]} />
+      <Pressable accessibilityLabel="Close" style={[styles.scrim, { backgroundColor: colors.overlay }]} onPress={onClose} />
+      <SafeAreaView edges={["bottom"]} style={[styles.sheet, { backgroundColor: colors.elevatedSurface }]}>
+        <View style={[styles.handle, { backgroundColor: colors.border }]} />
         {children}
       </SafeAreaView>
     </Modal>
@@ -244,8 +269,8 @@ export function Dialog({
   const colors = useTheme();
   return (
     <Modal transparent visible={visible} onRequestClose={onClose} animationType="fade">
-      <View style={[styles.dialogWrap, { backgroundColor: colors.scrim }]}>
-        <View style={[styles.dialog, { backgroundColor: colors.surface }]}>
+      <View style={[styles.dialogWrap, { backgroundColor: colors.overlay }]}>
+        <View style={[styles.dialog, { backgroundColor: colors.elevatedSurface }]}>
           <AppText role="headline">{title}</AppText>
           <AppText tone="muted">{body}</AppText>
           <Button label="Close" onPress={onClose} />
@@ -257,17 +282,15 @@ export function Dialog({
 
 export function Skeleton({ height = 72, width = "100%" }: { height?: number; width?: number | `${number}%` }) {
   const colors = useTheme();
-  return <View accessibilityLabel="Loading" style={[styles.skeleton, { height, width, backgroundColor: colors.line }]} />;
+  return <View accessibilityLabel="Loading" style={[styles.skeleton, { height, width, backgroundColor: colors.elevatedSurface }]} />;
 }
 
 export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   const colors = useTheme();
   return (
     <View style={styles.block}>
-      <View style={[styles.mark, { backgroundColor: colors.accentSoft }]}>
-        <Ionicons name="sparkles-outline" size={22} color={colors.accent} />
-      </View>
-      <AppText role="headline">{title}</AppText>
+      <View style={[styles.rule, { backgroundColor: colors.accent }]} />
+      <AppText role="headlineMedium">{title}</AppText>
       <AppText tone="muted">{body}</AppText>
       {action}
     </View>
@@ -277,10 +300,17 @@ export function EmptyState({ title, body, action }: { title: string; body: strin
 export function ErrorState({ title, body, onRetry }: { title: string; body: string; onRetry?: () => void }) {
   const colors = useTheme();
   return (
-    <View style={[styles.notice, { backgroundColor: colors.dangerSurface }]}>
+    <View style={styles.block}>
+      <View style={[styles.rule, { backgroundColor: colors.accent }]} />
       <AppText role="headline">{title}</AppText>
       <AppText tone="muted">{body}</AppText>
-      {onRetry ? <Button label="Try again" onPress={onRetry} /> : null}
+      {onRetry ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Try again" onPress={onRetry} style={styles.retry}>
+          <AppText role="label" tone="accent">
+            Try again
+          </AppText>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -288,10 +318,8 @@ export function ErrorState({ title, body, onRetry }: { title: string; body: stri
 export function ImageFrame({ label }: { label: string }) {
   const colors = useTheme();
   return (
-    <View accessibilityLabel={label} style={[styles.image, { backgroundColor: colors.accent }]}>
-      <AppText role="title" tone="inverse">
-        {label.slice(0, 1).toUpperCase()}
-      </AppText>
+    <View accessibilityLabel={label} style={[styles.image, { backgroundColor: colors.elevatedSurface }]}>
+      <AppText role="title">{label.slice(0, 1).toUpperCase()}</AppText>
     </View>
   );
 }
@@ -299,7 +327,7 @@ export function ImageFrame({ label }: { label: string }) {
 export function Attribution({ text }: { text: string }) {
   const colors = useTheme();
   return (
-    <Text allowFontScaling accessibilityLabel={text} style={{ color: colors.muted, fontSize: 12, fontWeight: "500" }}>
+    <Text allowFontScaling accessibilityLabel={text} style={[typeStyle("caption"), { color: colors.tertiaryText }]}>
       {text}
     </Text>
   );
@@ -320,8 +348,9 @@ const styles = StyleSheet.create({
     minHeight: hitTarget,
     borderRadius: radius.pill,
     alignItems: "center",
+    alignSelf: "stretch",
     justifyContent: "center",
-    paddingHorizontal: space[5],
+    paddingHorizontal: space.xl,
     borderWidth: 1,
   },
   icon: {
@@ -330,12 +359,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   chip: {
     minHeight: 40,
     borderRadius: radius.pill,
-    paddingHorizontal: space[4],
+    paddingHorizontal: space.lg,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -345,32 +374,28 @@ const styles = StyleSheet.create({
   fieldWrap: {
     minHeight: 52,
     borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: space[4],
+    borderRadius: radius.medium,
+    paddingHorizontal: space.lg,
     flexDirection: "row",
     alignItems: "center",
-    gap: space[2],
+    gap: space.sm,
   },
-  field: { flex: 1, fontSize: typeScale.body, paddingVertical: space[3] },
+  field: { flex: 1, paddingVertical: space.md },
   card: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 20,
-    padding: space[4],
-    gap: space[2],
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    elevation: 2,
+    borderRadius: radius.card,
+    padding: space.lg,
+    gap: space.sm,
   },
-  row: { paddingVertical: space[4], borderBottomWidth: StyleSheet.hairlineWidth, gap: space[1] },
+  row: { minHeight: 52, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth, justifyContent: "center", gap: 2 },
   scrim: { flex: 1 },
-  sheet: { padding: space[4], gap: space[3], borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: "center" },
-  dialogWrap: { flex: 1, justifyContent: "center", padding: space[6] },
-  dialog: { borderRadius: 20, padding: space[4], gap: space[3] },
-  skeleton: { borderRadius: 16 },
-  block: { gap: space[2], paddingVertical: space[6], alignItems: "flex-start" },
-  mark: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  notice: { borderRadius: 20, padding: space[4], gap: space[2] },
-  image: { height: 180, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  sheet: { padding: space.lg, gap: space.md, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  handle: { width: 36, height: 3, borderRadius: 2, alignSelf: "center", marginBottom: space.sm },
+  dialogWrap: { flex: 1, justifyContent: "center", padding: space.xl },
+  dialog: { borderRadius: radius.card, padding: space.lg, gap: space.md },
+  skeleton: { borderRadius: radius.medium },
+  block: { gap: space.sm, paddingVertical: space.lg, alignItems: "stretch", width: "100%" },
+  rule: { width: 28, height: 2, borderRadius: 1, marginBottom: space.xs },
+  retry: { minHeight: 44, justifyContent: "center" },
+  image: { height: 180, borderRadius: radius.card, alignItems: "flex-start", justifyContent: "flex-end", padding: space.lg },
 });
