@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "NYTO",
+    "name": "CITYDAY",
     "slug": "atlas",
     "scheme": "atlas",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "plugins": ["expo-router", "expo-localization", "expo-secure-store"],
     "experiments": {

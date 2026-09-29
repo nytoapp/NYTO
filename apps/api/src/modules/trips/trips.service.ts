@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { ErrorCodes } from "@atlas/contracts";
+import { ErrorCodes, tripDetailSchema, type CatalogKind } from "@atlas/contracts";
 import type { Pool } from "pg";
 import { AppError } from "../../shared/http/app-error";
 
@@ -62,6 +62,58 @@ export class TripsService {
       timezone: String(row.timezone),
       destinationLabel: String(row.label),
     }));
+  }
+
+  async get(userId: string, tripId: string) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tripId)) {
+      throw new AppError(ErrorCodes.NOT_FOUND, "That trip is not available.", 404);
+    }
+    const trip = await this.pool.query(
+      `select t.id, t.title, t.starts_on, t.ends_on, t.timezone, l.label
+       from trips t join resolved_locations l on l.id = t.destination_location_id
+       where t.id = $1 and t.owner_user_id = $2 and t.deleted_at is null`,
+      [tripId, userId],
+    );
+    const row = trip.rows[0];
+    if (!row) {
+      throw new AppError(ErrorCodes.NOT_FOUND, "That trip is not available.", 404);
+    }
+    const items = await this.pool.query(
+      `select i.id, i.trip_day_id, i.subject_id, i.slot, to_char(i.local_time, 'HH24:MI') as local_time, i.notes,
+              coalesce(tr.name, 'Untitled') as title, s.kind, d.civil_date
+       from trip_items i
+       join catalog_subjects s on s.id = i.subject_id and s.deleted_at is null
+       left join subject_translations tr on tr.subject_id = s.id and tr.locale = 'en'
+       left join trip_days d on d.id = i.trip_day_id
+       where i.trip_id = $1
+       order by d.civil_date nulls last, i.local_time nulls last, i.position`,
+      [tripId],
+    );
+    const days = new Map<string, { id: string; date: string; items: { id: string; subjectId: string; title: string; kind: CatalogKind; slot: "morning" | "lunch" | "afternoon" | "dinner" | "night" | "unscheduled"; localTime: string | null; notes: string | null }[] }>();
+    for (const item of items.rows) {
+      const date = item.civil_date ? String(item.civil_date).slice(0, 10) : String(row.starts_on).slice(0, 10);
+      const dayId = item.trip_day_id ? String(item.trip_day_id) : String(row.id);
+      const day = days.get(dayId) ?? { id: dayId, date, items: [] };
+      day.items.push({
+        id: String(item.id),
+        subjectId: String(item.subject_id),
+        title: String(item.title),
+        kind: item.kind as CatalogKind,
+        slot: item.slot,
+        localTime: item.local_time ? String(item.local_time) : null,
+        notes: item.notes ? String(item.notes) : null,
+      });
+      days.set(dayId, day);
+    }
+    return tripDetailSchema.parse({
+      id: String(row.id),
+      title: row.title ? String(row.title) : String(row.label),
+      startsOn: String(row.starts_on).slice(0, 10),
+      endsOn: String(row.ends_on).slice(0, 10),
+      timezone: String(row.timezone),
+      destinationLabel: String(row.label),
+      days: [...days.values()],
+    });
   }
 
   async addItem(

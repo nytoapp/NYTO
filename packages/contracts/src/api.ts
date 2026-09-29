@@ -25,6 +25,52 @@ export const searchRequestSchema = z
 
 export type SearchRequest = z.infer<typeof searchRequestSchema>;
 
+export const catalogImageSchema = z
+  .object({
+    url: z.string().url(),
+    alt: z.string().nullable(),
+    position: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const catalogPriceSchema = z
+  .object({
+    amountMinor: z.number().int().nonnegative(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    basis: z.enum(["per_person", "per_night", "total"]),
+  })
+  .strict();
+
+export const bookingCapabilities = ["book", "tickets", "website", "view_provider", "directions", "view_map", "unavailable"] as const;
+
+export const catalogBookingSchema = z
+  .object({
+    capability: z.enum(bookingCapabilities),
+    destinationId: z.string().min(1).nullable(),
+    label: z.string().nullable(),
+  })
+  .strict();
+
+export const catalogHourSchema = z
+  .object({
+    weekday: z.number().int().min(0).max(6),
+    opens: z.string().regex(/^\d{2}:\d{2}$/),
+    closes: z.string().regex(/^\d{2}:\d{2}$/),
+  })
+  .strict();
+
+const catalogCardFields = {
+  locality: z.string().nullable(),
+  category: z.string().nullable(),
+  images: z.array(catalogImageSchema).max(8),
+  rating: z.number().min(0).max(5).nullable(),
+  reviewCount: z.number().int().nonnegative().nullable(),
+  price: catalogPriceSchema.nullable(),
+  tags: z.array(z.string()).max(8),
+  booking: catalogBookingSchema,
+  startsAt: z.string().nullable(),
+};
+
 export const searchResultSchema = z
   .object({
     id: z.string().min(1),
@@ -51,6 +97,7 @@ export const searchResultSchema = z
       .strict()
       .nullable(),
     reasons: z.array(z.string()),
+    ...catalogCardFields,
   })
   .strict();
 
@@ -116,6 +163,10 @@ export const subjectDetailSchema = z
       .nullable(),
     factSource: z.literal("catalog"),
     attribution: z.array(attributionSchema),
+    ...catalogCardFields,
+    endsAt: z.string().nullable(),
+    phone: z.string().nullable(),
+    hours: z.array(catalogHourSchema).max(21),
   })
   .strict();
 
@@ -156,6 +207,40 @@ export const tripCreateRequestSchema = z
     partySize: z.number().int().min(1).max(50).nullable().optional(),
   })
   .strict();
+
+export const tripDetailSchema = z
+  .object({
+    id: z.string().uuid(),
+    title: z.string(),
+    startsOn: z.string(),
+    endsOn: z.string(),
+    timezone: z.string(),
+    destinationLabel: z.string(),
+    days: z.array(
+      z
+        .object({
+          id: z.string().uuid(),
+          date: z.string(),
+          items: z.array(
+            z
+              .object({
+                id: z.string().uuid(),
+                subjectId: z.string().uuid(),
+                title: z.string(),
+                kind: z.enum(catalogKinds),
+                slot: z.enum(["morning", "lunch", "afternoon", "dinner", "night", "unscheduled"]),
+                localTime: z.string().nullable(),
+                notes: z.string().nullable(),
+              })
+              .strict(),
+          ),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type TripDetail = z.infer<typeof tripDetailSchema>;
 
 export const tripItemRequestSchema = z
   .object({

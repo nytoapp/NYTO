@@ -3,8 +3,10 @@ import { limits } from "@atlas/config";
 import { ErrorCodes, type ParsedIntent, type SearchRequest, type SearchResponse, type SearchResult } from "@atlas/contracts";
 import type { Pool } from "pg";
 import { AppError } from "../../shared/http/app-error";
-import { timed } from "../../shared/observability/logger";
+import { logError, timed } from "../../shared/observability/logger";
+import { consumerReasons, emptyCatalogFacts, loadCatalogFacts, type CatalogFacts } from "../catalog/facts";
 import { signDestinationHandle } from "../destinations/handles";
+import { haversineMeters } from "../geo/choose-location";
 import { chooseLocation, type LocationCandidate } from "../geo/choose-location";
 import { ProviderGateway } from "../providers/gateway";
 import { dedupeObservations, type Observation } from "./dedupe";
@@ -73,8 +75,15 @@ export class SearchService {
       ...(internalFailed ? [{ code: "PARTIAL", message: "Some catalog results could not be loaded." }] : []),
       ...providers.warnings.map((warning) => ({ code: warning.code, message: warning.message })),
     ];
+    const ids = ranked.flatMap((item) => (item.subjectId ? [item.subjectId] : []));
+    let facts = new Map<string, CatalogFacts>();
+    try {
+      facts = await loadCatalogFacts(this.pool, ids, request.locale, 1);
+    } catch (error) {
+      logError("catalog facts unavailable", { name: error instanceof Error ? error.name : "Error" });
+    }
     return {
-      results: ranked.map((item) => this.present(item)),
+      results: ranked.map((item) => this.present(item, item.subjectId ? facts.get(item.subjectId) : undefined, located)),
       interpretation: intent,
       resolvedTime: time,
       locationLabel: located?.label ?? null,
@@ -83,25 +92,39 @@ export class SearchService {
     };
   }
 
-  private present(item: Observation & { reasons: string[] }): SearchResult {
+  private present(item: Observation & { reasons: string[] }, facts: CatalogFacts | undefined, origin: { latitude: number; longitude: number } | null): SearchResult {
+    const card = facts ?? emptyCatalogFacts();
     const destinationId =
       item.destinationId ??
       (item.destinationLabel
         ? signDestinationHandle({ provider: item.provider, externalId: item.externalId, action: "view_map" }, this.destinationSecret)
         : null);
+    const distanceMeters =
+      origin && item.latitude !== null && item.longitude !== null
+        ? Math.round(haversineMeters(origin, { latitude: item.latitude, longitude: item.longitude }))
+        : null;
     return {
       id: item.subjectId ?? `${item.provider}:${item.externalId}`,
       kind: item.kind,
       title: item.title,
-      summary: item.summary,
+      summary: card.summary ?? item.summary,
       factSource: item.factSource,
       provider: item.provider,
       state: item.state,
       attribution: item.attribution,
       location: item.latitude === null || item.longitude === null ? null : { latitude: item.latitude, longitude: item.longitude },
-      distanceMeters: null,
+      distanceMeters,
       destination: destinationId && item.destinationLabel ? { id: destinationId, label: item.destinationLabel } : null,
-      reasons: item.reasons,
+      reasons: consumerReasons(item.reasons),
+      locality: card.locality,
+      category: card.category,
+      images: card.images,
+      rating: null,
+      reviewCount: null,
+      price: card.price,
+      tags: card.tags,
+      booking: card.booking,
+      startsAt: card.startsAt ?? item.startsAt,
     };
   }
 
