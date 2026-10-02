@@ -1,0 +1,50 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+  }
+}
+
+allprojects {
+  repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://www.jitpack.io' }
+  }
+}
+
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"
+
+// pnpm paths exceed CMake's default 250-character object-path limit on Windows,
+// which makes ninja rebuild build.ninja forever ("still dirty after 100 tries").
+subprojects { subproject ->
+    def raiseCmakeObjectPathLimit = {
+        def androidExt = subproject.extensions.findByName("android")
+        if (androidExt == null) {
+            return
+        }
+        def cmakePath = null
+        try {
+            cmakePath = androidExt.externalNativeBuild?.cmake?.path
+        } catch (Throwable ignored) {
+        }
+        if (cmakePath == null) {
+            return
+        }
+        androidExt.defaultConfig.externalNativeBuild.cmake.arguments("-DCMAKE_OBJECT_PATH_MAX=1024")
+        logger.lifecycle("Raised CMake object path limit for ${subproject.path}")
+    }
+    if (subproject.state.executed) {
+        raiseCmakeObjectPathLimit()
+    } else {
+        subproject.afterEvaluate raiseCmakeObjectPathLimit
+    }
+}
