@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Redirect, Tabs } from "expo-router";
 import { StyleSheet, View, type ColorValue } from "react-native";
+import { useEffect } from "react";
 import { useTheme } from "../../components/theme/ThemeProvider";
+import { revealApp } from "../../features/landing/reveal";
 import { useOnboarding } from "../../features/onboarding/store";
 
 function TabIcon({ name, color, focused }: { name: keyof typeof Ionicons.glyphMap; color: ColorValue; focused: boolean }) {
@@ -25,6 +27,9 @@ const icons = {
 export default function TabLayout() {
   const colors = useTheme();
   const stage = useOnboarding((state) => state.stage);
+  useEffect(() => {
+    if (stage === "app") revealApp();
+  }, [stage]);
   if (stage === "welcome") {
     return <Redirect href="/welcome" />;
   }

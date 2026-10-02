@@ -2,16 +2,18 @@ import "../i18n";
 import { useEffect } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppErrorBoundary } from "../components/ErrorBoundary";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { ThemeProvider } from "../components/theme/ThemeProvider";
-import { colors } from "../components/theme/tokens";
 import { queryClient } from "../lib/query-client";
 import { useAuth } from "../features/auth/session";
-import { SplashView } from "../features/onboarding/SplashView";
+import { revealApp } from "../features/landing/reveal";
 import { useOnboarding } from "../features/onboarding/store";
+
+void SplashScreen.preventAutoHideAsync();
 
 function Startup() {
   const status = useAuth((state) => state.status);
@@ -20,14 +22,25 @@ function Startup() {
   useEffect(() => {
     void restore();
   }, [restore]);
+  useEffect(() => {
+    if (status === "restoring" || !hydrated) return;
+    const timer = setTimeout(revealApp, 1600);
+    return () => clearTimeout(timer);
+  }, [hydrated, status]);
   if (status === "restoring" || !hydrated) {
-    return <SplashView />;
+    return null;
   }
   return (
     <>
       <StatusBar style="light" />
       <OfflineBanner />
-      <Stack screenOptions={{ headerShown: false, animation: "slide_from_right", contentStyle: { backgroundColor: colors.background } }} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "fade",
+          contentStyle: { backgroundColor: "#1A2330" },
+        }}
+      />
     </>
   );
 }

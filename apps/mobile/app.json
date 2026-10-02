@@ -6,13 +6,37 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "plugins": ["expo-router", "expo-localization", "expo-secure-store"],
+    "backgroundColor": "#1A2330",
+    "splash": {
+      "image": "./assets/landing/pexels-damir-38349356.jpg",
+      "resizeMode": "cover",
+      "backgroundColor": "#1A2330"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#1A2330",
+          "image": "./assets/landing/pexels-damir-38349356.jpg",
+          "resizeMode": "cover",
+          "imageWidth": 1080
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": false
     },
     "ios": {
       "bundleIdentifier": "com.atlas.discovery",
       "supportsTablet": true
+    },
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#00000000",
+      "translucent": true
     },
     "android": {
       "package": "com.atlas.discovery"
