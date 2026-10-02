@@ -12,12 +12,12 @@ export type Interest = {
 export const interests: Interest[] = [
   { id: "food", label: "Food", query: "restaurants", icon: "restaurant-outline" },
   { id: "drinks", label: "Drinks", query: "bars", icon: "wine-outline" },
-  { id: "music", label: "Music", query: "live music", icon: "musical-notes-outline" },
+  { id: "music", label: "Music", query: "live music", icon: "musical-note-outline" },
   { id: "culture", label: "Art & Culture", query: "museums", icon: "color-palette-outline" },
-  { id: "sports", label: "Sports", query: "sports", icon: "bicycle-outline" },
-  { id: "wellness", label: "Wellness", query: "wellness", icon: "leaf-outline" },
-  { id: "nature", label: "Nature", query: "parks", icon: "trail-sign-outline" },
-  { id: "business", label: "Tech & Business", query: "coworking", icon: "briefcase-outline" },
+  { id: "sports", label: "Sports", query: "sports", icon: "football-outline" },
+  { id: "wellness", label: "Wellness", query: "wellness", icon: "flower-outline" },
+  { id: "nature", label: "Nature", query: "parks", icon: "leaf-outline" },
+  { id: "business", label: "Tech & Business", query: "coworking", icon: "desktop-outline" },
   { id: "fashion", label: "Fashion", query: "shopping", icon: "shirt-outline" },
 ];
 

@@ -35,14 +35,18 @@ export const useAuth = create<AuthState>((set) => ({
       SecureStore.getItemAsync(STAGE_KEY),
       SecureStore.getItemAsync(INTERESTS_KEY),
     ]);
-    const interests = readInterests(interestsRaw);
+    let interests = readInterests(interestsRaw);
     let stage: Stage = "welcome";
     if (token) {
       if (stageRaw === "interests") stage = "interests";
       else if (stageRaw === "app") stage = "app";
       else stage = interests.length > 0 ? "app" : "interests";
-    } else if (stageRaw === "app" || stageRaw === "interests") {
-      await SecureStore.setItemAsync(STAGE_KEY, "welcome");
+    } else {
+      interests = [];
+      const writes: Promise<void>[] = [];
+      if (stageRaw === "app" || stageRaw === "interests") writes.push(SecureStore.setItemAsync(STAGE_KEY, "welcome"));
+      if (interestsRaw && interestsRaw !== "[]") writes.push(SecureStore.setItemAsync(INTERESTS_KEY, "[]"));
+      if (writes.length > 0) await Promise.all(writes);
     }
     useOnboarding.setState({ hydrated: true, stage, interests });
     set({ status: token ? "signedIn" : "signedOut" });
@@ -59,8 +63,8 @@ export const useAuth = create<AuthState>((set) => ({
       // Local sign-out still has to finish if the network is down.
     }
     await writeAccessToken(null);
-    await SecureStore.setItemAsync(STAGE_KEY, "welcome");
-    useOnboarding.setState({ stage: "welcome" });
+    await Promise.all([SecureStore.setItemAsync(STAGE_KEY, "welcome"), SecureStore.setItemAsync(INTERESTS_KEY, "[]")]);
+    useOnboarding.setState({ stage: "welcome", interests: [] });
     set({ status: "signedOut" });
   },
 }));
