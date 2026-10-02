@@ -1,30 +1,74 @@
-import { useEffect, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Animated,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useMutation } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppText, SearchField, Sheet } from "../components/ui";
-import { useTheme } from "../components/theme/ThemeProvider";
 import { apiRequest, writeAccessToken } from "../api/client";
-import { friendlyError } from "../lib/errors";
-import { countryFlag, defaultPhoneCountry, matchCountries, nationalNumber, phoneReady as numberReady, type PhoneCountry } from "../features/auth/countries";
+import { countryFlag } from "../features/auth/countries";
+import { signInWithGoogle } from "../features/auth/google";
 import { useAuth } from "../features/auth/session";
 import { useOnboarding } from "../features/onboarding/store";
+import { friendlyError } from "../lib/errors";
 
 const page = "#F7F5F1";
 const ink = "#1A1C1A";
 const muted = "#8A8680";
-const field = "#FBFBF9";
+const quiet = "#A39E96";
 const line = "#E4E0D8";
+const field = "#FFFFFF";
 const danger = "#9C3B32";
+const indiaDial = "91";
 
-type Step = "choose" | "phone" | "code" | "email";
+const googleMark = require("../../assets/auth/google-g.png");
+
+type Step = "phone" | "code";
+
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
+      if (mounted) setReduced(value);
+    });
+    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduced);
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+  return reduced;
+}
 
 function device() {
   const platform = Platform.OS === "android" ? "android" : Platform.OS === "web" ? "web" : "ios";
   return { platform, label: "CITYDAY" } as const;
+}
+
+function indiaNational(input: string): string {
+  let digits = input.replace(/\D/g, "");
+  if (digits.startsWith(indiaDial) && digits.length > 10) digits = digits.slice(indiaDial.length);
+  if (digits.startsWith("0")) digits = digits.replace(/^0+/, "");
+  return digits.slice(0, 10);
+}
+
+function spokenNumber(national: string): string {
+  if (national.length !== 10) return `+${indiaDial}`;
+  return `+${indiaDial} ${national.slice(0, 5)} ${national.slice(5)}`;
 }
 
 function CodeBoxes({ value, onChange }: { value: string; onChange: (next: string) => void }) {
@@ -34,7 +78,7 @@ function CodeBoxes({ value, onChange }: { value: string; onChange: (next: string
       <View style={styles.cells} pointerEvents="none">
         {cells.map((cell, index) => (
           <View key={index} style={[styles.cell, cell ? styles.cellFilled : null]}>
-            <Text allowFontScaling style={styles.cellText}>
+            <Text allowFontScaling maxFontSizeMultiplier={1.2} style={styles.cellText}>
               {cell}
             </Text>
           </View>
@@ -47,6 +91,7 @@ function CodeBoxes({ value, onChange }: { value: string; onChange: (next: string
         keyboardType="number-pad"
         textContentType="oneTimeCode"
         autoComplete="sms-otp"
+        importantForAutofill="yes"
         maxLength={6}
         autoFocus
         caretHidden
@@ -56,27 +101,24 @@ function CodeBoxes({ value, onChange }: { value: string; onChange: (next: string
   );
 }
 
-function Choice({
+function ProviderButton({
   label,
-  icon,
   onPress,
-  filled,
+  mark,
 }: {
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
-  filled?: boolean;
+  mark: ReactNode;
 }) {
-  const color = filled ? "#F7F5F1" : ink;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => [styles.choice, filled ? styles.choiceFilled : styles.choiceQuiet, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.provider, pressed && styles.pressed]}
     >
-      <Ionicons name={icon} size={22} color={color} style={styles.choiceIcon} />
-      <Text allowFontScaling style={[styles.choiceLabel, { color }]}>
+      <View style={styles.markSlot}>{mark}</View>
+      <Text allowFontScaling maxFontSizeMultiplier={1.25} style={styles.providerLabel}>
         {label}
       </Text>
     </Pressable>
@@ -84,26 +126,34 @@ function Choice({
 }
 
 export default function SignInScreen() {
-  const colors = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
   const enterApp = useOnboarding((state) => state.enterApp);
   const setStage = useOnboarding((state) => state.setStage);
   const interests = useOnboarding((state) => state.interests);
   const markSignedIn = useAuth((state) => state.markSignedIn);
-  const [step, setStep] = useState<Step>("choose");
-  const [country, setCountry] = useState<PhoneCountry>(defaultPhoneCountry);
-  const [picker, setPicker] = useState(false);
-  const [filter, setFilter] = useState("");
+  const [step, setStep] = useState<Step>("phone");
   const [national, setNational] = useState("");
+  const [focused, setFocused] = useState(false);
+  const [fieldNote, setFieldNote] = useState<string | null>(null);
   const [code, setCode] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [seconds, setSeconds] = useState(0);
+  const [providerNotice, setProviderNotice] = useState<string | null>(null);
   const sentCode = useRef("");
-  const phoneE164 = `+${country.dial}${national}`;
-  const ready = numberReady(country, national);
-  const shown = matchCountries(filter);
+  const phoneLock = useRef(false);
+  const providerLock = useRef(false);
+  const enter = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  const phoneE164 = `+${indiaDial}${national}`;
+  const phoneReady = national.length === 10;
+
+  useEffect(() => {
+    if (reduced) {
+      enter.setValue(1);
+      return;
+    }
+    Animated.timing(enter, { toValue: 1, duration: 340, useNativeDriver: true }).start();
+  }, [enter, reduced]);
 
   useEffect(() => {
     if (seconds <= 0) return;
@@ -132,7 +182,12 @@ export default function SignInScreen() {
     },
     onSuccess: () => {
       setStep("code");
+      setCode("");
+      sentCode.current = "";
       setSeconds(30);
+    },
+    onSettled: () => {
+      phoneLock.current = false;
     },
   });
 
@@ -156,48 +211,64 @@ export default function SignInScreen() {
     verify.mutate();
   }, [code, step, verify]);
 
-  const emailLogin = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest<{ accessToken: string }>("/api/v1/auth/email/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password, device: device() }),
-      });
-      if (response.error || !response.data) throw new Error(response.error?.message ?? "Email or password is incorrect.");
-      await writeAccessToken(response.data.accessToken);
-    },
-    onSuccess: () => {
-      void finish();
-    },
-  });
+  function requestCode() {
+    if (!phoneReady || start.isPending || phoneLock.current) return;
+    phoneLock.current = true;
+    setProviderNotice(null);
+    setFieldNote(null);
+    start.mutate();
+  }
 
-  const error = start.error ?? verify.error ?? emailLogin.error;
-  const heading = step === "email" ? "Gmail" : step === "code" ? "Enter your code" : step === "phone" ? "Your number" : "Log in";
-  const support =
-    step === "code"
-      ? `Enter the 6-digit code for ${phoneE164}.`
-      : step === "email"
-        ? "Use your Gmail address and password."
-        : step === "phone"
-          ? "Enter your mobile number."
-          : "";
+  async function onGoogle() {
+    if (providerLock.current || start.isPending) return;
+    providerLock.current = true;
+    setProviderNotice(null);
+    try {
+      const result = await signInWithGoogle();
+      if (result === "cancelled") return;
+      const response = await apiRequest<{ accessToken: string }>("/api/v1/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ idToken: result.idToken, nonce: result.nonce, device: device() }),
+      });
+      if (response.error || !response.data) {
+        throw new Error(response.error?.message ?? "Google sign-in didn't go through. Try again.");
+      }
+      await writeAccessToken(response.data.accessToken);
+      await finish();
+    } catch (error) {
+      setProviderNotice(friendlyError(error, "Google sign-in didn't go through. Try again."));
+    } finally {
+      providerLock.current = false;
+    }
+  }
+
+  function onApple() {
+    if (providerLock.current || start.isPending) return;
+    providerLock.current = true;
+    console.warn("[CITYDAY auth] Apple sign-in is not configured. APPLE_CLIENT_IDS is empty, and Android has no Sign in with Apple session.");
+    setProviderNotice("Apple sign-in isn't available right now.");
+    providerLock.current = false;
+  }
 
   function back() {
     if (step === "code") {
       setStep("phone");
-      return;
-    }
-    if (step === "phone" || step === "email") {
-      setStep("choose");
+      setCode("");
+      sentCode.current = "";
+      verify.reset();
       return;
     }
     router.back();
   }
 
-  const phoneCanContinue = ready && !start.isPending;
-  const emailCanContinue = email.length > 0 && password.length > 0 && !emailLogin.isPending;
+  const phoneError = start.error ?? (step === "code" ? verify.error : null);
+  const motion = {
+    opacity: enter,
+    transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+  };
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.screen, { paddingTop: insets.top + 4 }]}>
       <Stack.Screen
         options={{
           animation: "slide_from_right",
@@ -209,229 +280,233 @@ export default function SignInScreen() {
       />
       <StatusBar style="dark" />
       <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} onPress={back} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
-          <Ionicons name="chevron-back" size={24} color={ink} />
-        </Pressable>
-        <ScrollView contentContainerStyle={[styles.body, step === "choose" && styles.bodyChoose]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <Text allowFontScaling maxFontSizeMultiplier={1.25} accessibilityRole="header" style={styles.heading}>
-            {heading}
-          </Text>
-          {support ? (
-            <Text allowFontScaling maxFontSizeMultiplier={1.3} style={styles.support}>
-              {support}
+        <ScrollView
+          contentContainerStyle={[styles.body, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            hitSlop={8}
+            onPress={back}
+            style={({ pressed }) => [styles.back, pressed && styles.pressed]}
+          >
+            <Ionicons name="chevron-back" size={26} color={ink} />
+          </Pressable>
+
+          <Animated.View style={motion}>
+            <Text allowFontScaling maxFontSizeMultiplier={1.2} accessibilityRole="header" style={styles.heading}>
+              {step === "code" ? "Enter your code" : "Log in"}
             </Text>
-          ) : null}
+            <Text allowFontScaling maxFontSizeMultiplier={1.3} style={styles.support}>
+              {step === "code"
+                ? `Enter the 6-digit code for ${spokenNumber(national)}.`
+                : "Sign in to continue to CITYDAY"}
+            </Text>
 
-          {step === "choose" ? <View style={styles.flex} /> : null}
-          {step === "choose" ? (
-            <View style={[styles.choices, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
-              <Choice label="Gmail" icon="logo-google" onPress={() => setStep("email")} />
-              <Choice label="Mobile number" icon="call-outline" onPress={() => setStep("phone")} />
-              <Choice label="Apple" icon="logo-apple" filled onPress={() => undefined} />
-            </View>
-          ) : null}
+            {step === "phone" ? (
+              <View style={styles.form}>
+                <View style={[styles.phone, focused && styles.phoneFocused]}>
+                  <Text allowFontScaling style={styles.flag} importantForAccessibility="no">
+                    {countryFlag("IN")}
+                  </Text>
+                  <Text allowFontScaling style={styles.dial} importantForAccessibility="no">
+                    +{indiaDial}
+                  </Text>
+                  <View style={styles.phoneRule} />
+                  <TextInput
+                    accessibilityLabel="Mobile phone number"
+                    accessibilityHint="India, country code plus 91. Enter 10 digits."
+                    value={national}
+                    onChangeText={(value) => {
+                      const next = indiaNational(value);
+                      setNational(next);
+                      if (next.length === 0 || next.length === 10) setFieldNote(null);
+                      if (start.isError) start.reset();
+                    }}
+                    onFocus={() => {
+                      setFocused(true);
+                      setFieldNote(null);
+                    }}
+                    onBlur={() => {
+                      setFocused(false);
+                      if (national.length > 0 && national.length < 10) setFieldNote("Enter a 10-digit mobile number.");
+                    }}
+                    placeholder="Mobile number"
+                    placeholderTextColor={quiet}
+                    keyboardType="phone-pad"
+                    inputMode="tel"
+                    textContentType="telephoneNumber"
+                    autoComplete="tel"
+                    importantForAutofill="yes"
+                    maxLength={24}
+                    style={styles.national}
+                  />
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue"
+                  accessibilityState={{ disabled: !phoneReady || start.isPending, busy: start.isPending }}
+                  disabled={!phoneReady || start.isPending}
+                  onPress={requestCode}
+                  style={({ pressed }) => [
+                    styles.continue,
+                    !phoneReady && styles.continueDisabled,
+                    pressed && phoneReady && !start.isPending && styles.pressed,
+                  ]}
+                >
+                  <Text
+                    allowFontScaling
+                    maxFontSizeMultiplier={1.25}
+                    style={[styles.continueLabel, !phoneReady && styles.continueLabelDisabled, start.isPending && styles.hiddenLabel]}
+                  >
+                    Continue
+                  </Text>
+                  {start.isPending ? <ActivityIndicator color={page} style={styles.continueSpinner} /> : null}
+                </Pressable>
+
+                {fieldNote || phoneError ? (
+                  <Text allowFontScaling style={styles.error}>
+                    {fieldNote ?? friendlyError(phoneError, "That did not work. Try again.")}
+                  </Text>
+                ) : null}
+
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text allowFontScaling style={styles.dividerLabel}>
+                    or
+                  </Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                <View style={styles.providers}>
+                  <ProviderButton
+                    label="Continue with Google"
+                    onPress={() => void onGoogle()}
+                    mark={<Image source={googleMark} style={styles.googleMark} resizeMode="contain" accessibilityElementsHidden />}
+                  />
+                  <ProviderButton
+                    label="Continue with Apple"
+                    onPress={onApple}
+                    mark={<Ionicons name="logo-apple" size={20} color={ink} />}
+                  />
+                </View>
+
+                {providerNotice ? (
+                  <Text allowFontScaling style={styles.error}>
+                    {providerNotice}
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.form}>
+                <CodeBoxes value={code} onChange={setCode} />
+                {verify.isPending ? <ActivityIndicator color={ink} style={styles.codeSpinner} /> : null}
+                {phoneError ? (
+                  <Text allowFontScaling style={styles.error}>
+                    {friendlyError(phoneError, "That code is not valid.")}
+                  </Text>
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={seconds > 0 ? `Resend in ${seconds} seconds` : "Resend code"}
+                  accessibilityState={{ disabled: seconds > 0 || start.isPending }}
+                  disabled={seconds > 0 || start.isPending}
+                  onPress={requestCode}
+                  style={styles.resend}
+                >
+                  <Text allowFontScaling style={[styles.resendLabel, (seconds > 0 || start.isPending) && styles.resendDisabled]}>
+                    {start.isPending ? "Resending" : seconds > 0 ? `Resend in ${seconds}s` : "Resend code"}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </Animated.View>
 
           {step === "phone" ? (
-            <View style={styles.phoneRow}>
-              <Pressable accessibilityRole="button" accessibilityLabel={`${country.name} +${country.dial}`} onPress={() => setPicker(true)} style={styles.dial}>
-                <Text allowFontScaling style={styles.dialIso}>
-                  {countryFlag(country.iso)}  {country.iso}
-                </Text>
-                <Text allowFontScaling style={styles.dialCode}>
-                  +{country.dial}
-                </Text>
-              </Pressable>
-              <View style={styles.divider} />
-              <TextInput
-                accessibilityLabel="Mobile number"
-                value={national}
-                onChangeText={(value) => setNational(nationalNumber(value, country.max))}
-                placeholder={country.iso === "SE" ? "7XX XXX XXX" : "Mobile number"}
-                placeholderTextColor={muted}
-                keyboardType="number-pad"
-                textContentType="telephoneNumber"
-                autoComplete="tel"
-                style={styles.national}
-              />
-            </View>
-          ) : null}
-
-          {step === "code" ? <CodeBoxes value={code} onChange={setCode} /> : null}
-
-          {step === "email" ? (
-            <View style={styles.fields}>
-              <TextInput
-                accessibilityLabel="Gmail address"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Gmail address"
-                placeholderTextColor={muted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                autoComplete="email"
-                style={styles.field}
-              />
-              <TextInput
-                accessibilityLabel="Password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Password"
-                placeholderTextColor={muted}
-                secureTextEntry
-                textContentType="password"
-                autoComplete="password"
-                style={styles.field}
-              />
-            </View>
-          ) : null}
-
-          {error ? <Text style={styles.error}>{friendlyError(error, "That did not work. Try again.")}</Text> : null}
-
-          {step === "phone" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Continue"
-              accessibilityState={{ disabled: !phoneCanContinue }}
-              disabled={!phoneCanContinue}
-              onPress={() => start.mutate()}
-              style={({ pressed }) => [styles.continue, !phoneCanContinue && styles.continueDisabled, pressed && phoneCanContinue && styles.pressed]}
-            >
-              <Text style={[styles.continueLabel, !phoneCanContinue && styles.continueLabelDisabled]}>{start.isPending ? "Continuing" : "Continue"}</Text>
-            </Pressable>
-          ) : null}
-          {step === "code" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={seconds > 0 ? `Resend in ${seconds} seconds` : "Resend code"}
-              disabled={seconds > 0 || start.isPending}
-              onPress={() => start.mutate()}
-              style={styles.textButton}
-            >
-              <Text style={styles.textButtonLabel}>{seconds > 0 ? `Resend in ${seconds}s` : "Resend code"}</Text>
-            </Pressable>
-          ) : null}
-          {step === "email" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Continue"
-              accessibilityState={{ disabled: !emailCanContinue }}
-              disabled={!emailCanContinue}
-              onPress={() => emailLogin.mutate()}
-              style={({ pressed }) => [styles.continue, !emailCanContinue && styles.continueDisabled, pressed && emailCanContinue && styles.pressed]}
-            >
-              <Text style={[styles.continueLabel, !emailCanContinue && styles.continueLabelDisabled]}>
-                {emailLogin.isPending ? "Signing in" : "Continue"}
-              </Text>
-            </Pressable>
+            <Text allowFontScaling maxFontSizeMultiplier={1.35} style={styles.legal}>
+              By continuing, you agree to our Terms of Service and Privacy Policy.
+            </Text>
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
-      <Sheet
-        visible={picker}
-        onClose={() => {
-          setPicker(false);
-          setFilter("");
-        }}
-      >
-        <AppText role="headline">Country</AppText>
-        <SearchField value={filter} onChangeText={setFilter} placeholder="Search countries" hideIcon />
-        <ScrollView keyboardShouldPersistTaps="handled" style={styles.countryList}>
-          {shown.map((item) => {
-            const selected = item.iso === country.iso;
-            return (
-              <Pressable
-                key={item.iso}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                accessibilityLabel={`${item.name} +${item.dial}`}
-                onPress={() => {
-                  setCountry(item);
-                  setNational("");
-                  setPicker(false);
-                  setFilter("");
-                }}
-                style={[styles.country, { borderBottomColor: colors.divider }]}
-              >
-                <AppText role="label">
-                  {countryFlag(item.iso)}  {item.name}
-                </AppText>
-                <AppText role="label" tone={selected ? "accent" : "muted"}>
-                  +{item.dial}
-                </AppText>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </Sheet>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: page, paddingHorizontal: 24 },
+  screen: { flex: 1, backgroundColor: page },
   fill: { flex: 1 },
+  body: { flexGrow: 1, paddingHorizontal: 24 },
   back: { width: 44, height: 44, alignItems: "flex-start", justifyContent: "center" },
-  body: { flexGrow: 1, paddingTop: 36, paddingBottom: 24 },
-  bodyChoose: { paddingBottom: 0 },
-  flex: { flexGrow: 1, minHeight: 32 },
-  heading: { color: ink, fontSize: 40, lineHeight: 46, fontWeight: "600", letterSpacing: -0.8 },
-  support: { color: muted, fontSize: 16, lineHeight: 23, maxWidth: 320, marginTop: 8, marginBottom: 8 },
-  choices: { gap: 10 },
-  choice: {
-    minHeight: 58,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  choiceQuiet: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E3DED6" },
-  choiceFilled: { backgroundColor: ink },
-  choiceIcon: { position: "absolute", left: 20 },
-  choiceLabel: { fontSize: 16, fontWeight: "600" },
-  phoneRow: {
-    minHeight: 56,
+  heading: { color: ink, fontSize: 32, lineHeight: 38, fontWeight: "600", letterSpacing: -0.45, marginTop: 8 },
+  support: { color: "#736E68", fontSize: 16, lineHeight: 22, marginTop: 6 },
+  form: { marginTop: 28 },
+  phone: {
+    height: 56,
     borderRadius: 16,
     backgroundColor: field,
     borderWidth: 1,
     borderColor: line,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
-  dial: { minHeight: 48, paddingRight: 12, justifyContent: "center" },
-  dialIso: { color: ink, fontSize: 15, fontWeight: "600" },
-  dialCode: { color: muted, fontSize: 13, marginTop: 2 },
-  divider: { width: StyleSheet.hairlineWidth, alignSelf: "stretch", marginVertical: 12, backgroundColor: line },
-  national: { flex: 1, color: ink, fontSize: 18, paddingVertical: 12, paddingLeft: 12 },
-  fields: { gap: 12 },
-  field: {
-    minHeight: 56,
-    borderRadius: 16,
+  phoneFocused: { borderColor: ink },
+  flag: { fontSize: 18, lineHeight: 22 },
+  dial: { color: ink, fontSize: 16, lineHeight: 20, fontWeight: "600", marginLeft: 10, includeFontPadding: false },
+  phoneRule: { width: StyleSheet.hairlineWidth, height: 18, backgroundColor: "#E3DDD4", marginHorizontal: 12 },
+  national: {
+    flex: 1,
+    color: ink,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: "500",
+    height: 56,
+    paddingVertical: 0,
+    includeFontPadding: false,
+  },
+  continue: {
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: ink,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  continueDisabled: { backgroundColor: "#E3DFD8" },
+  continueLabel: { color: page, fontSize: 16, lineHeight: 20, fontWeight: "600" },
+  continueLabelDisabled: { color: quiet },
+  hiddenLabel: { opacity: 0 },
+  continueSpinner: { position: "absolute" },
+  dividerRow: { flexDirection: "row", alignItems: "center", marginTop: 28 },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: "#D9D3CB" },
+  dividerLabel: { color: quiet, fontSize: 13, lineHeight: 18, marginHorizontal: 12 },
+  providers: { marginTop: 16, gap: 10 },
+  provider: {
+    height: 56,
+    borderRadius: 28,
     backgroundColor: field,
     borderWidth: 1,
     borderColor: line,
-    color: ink,
-    fontSize: 16,
-    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  continue: { minHeight: 56, borderRadius: 28, backgroundColor: ink, alignItems: "center", justifyContent: "center", marginTop: 8 },
-  continueDisabled: { backgroundColor: "#E3DFD8" },
-  continueLabel: { color: "#F7F5F1", fontSize: 16, fontWeight: "600" },
-  continueLabelDisabled: { color: "#A39E96" },
-  textButton: { minHeight: 48, alignItems: "center", justifyContent: "center" },
-  textButtonLabel: { color: ink, fontSize: 15, fontWeight: "600" },
-  error: { color: danger, fontSize: 14, lineHeight: 20 },
-  pressed: { transform: [{ scale: 0.98 }], opacity: 0.92 },
-  countryList: { maxHeight: 360 },
-  country: { minHeight: 52, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth },
+  markSlot: { position: "absolute", left: 18, width: 22, height: 22, alignItems: "center", justifyContent: "center" },
+  googleMark: { width: 18, height: 18 },
+  providerLabel: { color: ink, fontSize: 16, fontWeight: "600", textAlign: "center", paddingHorizontal: 44 },
+  error: { color: danger, fontSize: 14, lineHeight: 20, marginTop: 12 },
+  legal: { color: muted, fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 28 },
+  pressed: { transform: [{ scale: 0.985 }], opacity: 0.92 },
   codeWrap: { position: "relative" },
   cells: { flexDirection: "row", gap: 8 },
   cell: {
     flex: 1,
-    height: 56,
-    borderRadius: 14,
-    borderWidth: 1,
+    height: 58,
+    borderRadius: 16,
+    borderWidth: 1.5,
     borderColor: line,
     backgroundColor: field,
     alignItems: "center",
@@ -439,5 +514,9 @@ const styles = StyleSheet.create({
   },
   cellFilled: { borderColor: ink },
   cellText: { color: ink, fontSize: 22, fontWeight: "600" },
-  hiddenInput: { position: "absolute", left: 0, right: 0, top: 0, height: 56, opacity: 0.02, color: ink },
+  hiddenInput: { position: "absolute", left: 0, right: 0, top: 0, height: 58, opacity: 0.02, color: ink },
+  codeSpinner: { marginTop: 16 },
+  resend: { minHeight: 48, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  resendLabel: { color: ink, fontSize: 15, fontWeight: "600" },
+  resendDisabled: { color: quiet },
 });

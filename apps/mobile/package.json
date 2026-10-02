@@ -5,8 +5,8 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +16,7 @@
     "@tanstack/react-query": "^5.90.2",
     "expo": "~57.0.25",
     "expo-constants": "~57.0.19",
+    "expo-dev-client": "~57.0.19",
     "expo-linear-gradient": "^57.0.2",
     "expo-linking": "~57.0.11",
     "expo-localization": "~57.0.0",
@@ -28,6 +29,8 @@
     "react": "19.2.3",
     "react-i18next": "^15.7.3",
     "react-native": "0.86.3",
+    "react-native-nitro-google-signin": "^2.3.0",
+    "react-native-nitro-modules": "^0.37.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "zustand": "^5.0.8"
