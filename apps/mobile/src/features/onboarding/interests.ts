@@ -1,4 +1,5 @@
 import type { Ionicons } from "@expo/vector-icons";
+import type { ImageSourcePropType } from "react-native";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -7,18 +8,19 @@ export type Interest = {
   label: string;
   query: string;
   icon: IconName;
+  image: ImageSourcePropType;
 };
 
 export const interests: Interest[] = [
-  { id: "food", label: "Food", query: "restaurants", icon: "restaurant-outline" },
-  { id: "drinks", label: "Drinks", query: "bars", icon: "wine-outline" },
-  { id: "music", label: "Music", query: "live music", icon: "musical-note-outline" },
-  { id: "culture", label: "Art & Culture", query: "museums", icon: "color-palette-outline" },
-  { id: "sports", label: "Sports", query: "sports", icon: "football-outline" },
-  { id: "wellness", label: "Wellness", query: "wellness", icon: "flower-outline" },
-  { id: "nature", label: "Nature", query: "parks", icon: "leaf-outline" },
-  { id: "business", label: "Tech & Business", query: "coworking", icon: "desktop-outline" },
-  { id: "fashion", label: "Fashion", query: "shopping", icon: "shirt-outline" },
+  { id: "food", label: "Food", query: "restaurants", icon: "restaurant-outline", image: require("../../../assets/interests/food.jpg") },
+  { id: "music", label: "Music", query: "live music", icon: "musical-notes-outline", image: require("../../../assets/interests/music.jpg") },
+  { id: "culture", label: "Culture", query: "museums", icon: "color-palette-outline", image: require("../../../assets/interests/culture.jpg") },
+  { id: "outdoors", label: "Outdoors", query: "parks", icon: "leaf-outline", image: require("../../../assets/interests/outdoors.jpg") },
+  { id: "shopping", label: "Shopping", query: "shopping", icon: "bag-outline", image: require("../../../assets/interests/shopping.jpg") },
+  { id: "nightlife", label: "Nightlife", query: "nightlife", icon: "moon-outline", image: require("../../../assets/interests/nightlife.jpg") },
+  { id: "activities", label: "Activities", query: "things to do", icon: "walk-outline", image: require("../../../assets/interests/activities.jpg") },
+  { id: "wellness", label: "Wellness", query: "wellness", icon: "flower-outline", image: require("../../../assets/interests/wellness.jpg") },
+  { id: "surprise", label: "Surprise me", query: "things to do", icon: "sparkles-outline", image: require("../../../assets/interests/surprise.jpg") },
 ];
 
 export function interestsById(ids: string[]): Interest[] {

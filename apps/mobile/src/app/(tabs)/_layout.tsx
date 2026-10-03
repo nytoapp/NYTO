@@ -1,31 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Redirect, Tabs } from "expo-router";
-import { StyleSheet, View, type ColorValue } from "react-native";
+import { Redirect, Stack, Tabs } from "expo-router";
+import { StyleSheet } from "react-native";
 import { useEffect } from "react";
-import { useTheme } from "../../components/theme/ThemeProvider";
+import { city, font } from "../../features/city/theme";
 import { revealApp } from "../../features/landing/reveal";
 import { useOnboarding } from "../../features/onboarding/store";
 
-function TabIcon({ name, color, focused }: { name: keyof typeof Ionicons.glyphMap; color: ColorValue; focused: boolean }) {
-  const colors = useTheme();
-  return (
-    <View style={styles.tabIcon}>
-      <View style={[styles.mark, { backgroundColor: focused ? colors.accent : "transparent" }]} />
-      <Ionicons name={name} color={color} size={20} />
-    </View>
-  );
-}
-
 const icons = {
-  index: "home-outline",
-  search: "search-outline",
-  saved: "bookmark-outline",
-  trips: "calendar-outline",
-  profile: "person-outline",
+  index: { off: "home-outline", on: "home" },
+  explore: { off: "compass-outline", on: "compass" },
+  trips: { off: "calendar-outline", on: "calendar" },
+  saved: { off: "bookmark-outline", on: "bookmark" },
+  profile: { off: "person-outline", on: "person" },
 } as const;
 
 export default function TabLayout() {
-  const colors = useTheme();
   const stage = useOnboarding((state) => state.stage);
   useEffect(() => {
     if (stage === "app") revealApp();
@@ -37,18 +26,20 @@ export default function TabLayout() {
     return <Redirect href="/interests" />;
   }
   return (
+    <>
+    <Stack.Screen options={{ statusBarStyle: "dark", contentStyle: { backgroundColor: city.page } }} />
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primaryText,
-        tabBarInactiveTintColor: colors.tertiaryText,
+        tabBarActiveTintColor: city.ink,
+        tabBarInactiveTintColor: city.quiet,
         tabBarStyle: {
-          backgroundColor: colors.background,
-          borderTopColor: colors.divider,
+          backgroundColor: city.page,
+          borderTopColor: city.line,
           borderTopWidth: StyleSheet.hairlineWidth,
           elevation: 0,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "500", letterSpacing: 0.2 },
+        tabBarLabelStyle: font.navigation,
         tabBarItemStyle: { paddingTop: 4 },
         tabBarHideOnKeyboard: true,
       }}
@@ -57,42 +48,39 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, focused }) => <TabIcon name={icons.index} color={color} focused={focused} />,
+          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.index.on : icons.index.off} color={color} size={22} />,
         }}
       />
       <Tabs.Screen
-        name="search"
+        name="explore"
         options={{
-          title: "Search",
-          tabBarIcon: ({ color, focused }) => <TabIcon name={icons.search} color={color} focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="saved"
-        options={{
-          title: "Saved",
-          tabBarIcon: ({ color, focused }) => <TabIcon name={icons.saved} color={color} focused={focused} />,
+          title: "Explore",
+          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.explore.on : icons.explore.off} color={color} size={22} />,
         }}
       />
       <Tabs.Screen
         name="trips"
         options={{
           title: "Plans",
-          tabBarIcon: ({ color, focused }) => <TabIcon name={icons.trips} color={color} focused={focused} />,
+          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.trips.on : icons.trips.off} color={color} size={22} />,
+        }}
+      />
+      <Tabs.Screen
+        name="saved"
+        options={{
+          title: "Saved",
+          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.saved.on : icons.saved.off} color={color} size={22} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, focused }) => <TabIcon name={icons.profile} color={color} focused={focused} />,
+          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.profile.on : icons.profile.off} color={color} size={22} />,
         }}
       />
     </Tabs>
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  tabIcon: { alignItems: "center", gap: 4 },
-  mark: { width: 12, height: 2, borderRadius: 1 },
-});

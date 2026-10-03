@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ErrorCodes, placeListQuerySchema, placeWriteSchema, successEnvelope } from "@atlas/contracts";
 import type { Request } from "express";
 import { z, type ZodType } from "zod";
@@ -63,7 +63,7 @@ function envelope<T>(request: Request, data: T) {
 @UseGuards(RequireAuthGuard, RolesGuard)
 @Roles("admin")
 export class PlacesAdminController {
-  constructor(private readonly places: PlacesAdminService) {}
+  constructor(@Inject(PlacesAdminService) private readonly places: PlacesAdminService) {}
 
   @Get("places")
   async list(@Req() request: Request, @Query() query: Record<string, unknown>) {

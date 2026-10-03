@@ -5,22 +5,28 @@ import { Database } from "./database";
 
 export async function applySqlFiles(database: Database, directory: string): Promise<string[]> {
   const names = (await readdir(directory)).filter((name) => name.endsWith(".sql")).sort();
-  await database.pool.query(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      id text PRIMARY KEY,
-      applied_at timestamptz NOT NULL DEFAULT clock_timestamp()
-    )
-  `);
   const applied: string[] = [];
   for (const name of names) {
-    const existing = await database.pool.query("select 1 from schema_migrations where id = $1", [name]);
-    if (existing.rowCount) {
-      continue;
+    const registered = await database.pool.query("select to_regclass('public.schema_migrations') as rel");
+    if (registered.rows[0]?.rel) {
+      const existing = await database.pool.query("select 1 from schema_migrations where id = $1", [name]);
+      if (existing.rowCount) {
+        continue;
+      }
     }
     const sql = await readFile(path.join(directory, name), "utf8");
     const client = await database.pool.connect();
     try {
       await client.query("begin");
+      // 001_foundation.sql creates schema_migrations. An empty table left by an
+      // earlier runner attempt would make that statement fail.
+      const pending = await client.query("select to_regclass('public.schema_migrations') as rel");
+      if (pending.rows[0]?.rel && sql.includes("CREATE TABLE schema_migrations")) {
+        const count = await client.query("select count(*)::int as n from schema_migrations");
+        if (count.rows[0]?.n === 0) {
+          await client.query("drop table schema_migrations");
+        }
+      }
       await client.query(sql);
       await client.query("insert into schema_migrations (id) values ($1)", [name]);
       await client.query("commit");

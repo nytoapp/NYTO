@@ -3,7 +3,6 @@ import { useEffect } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppErrorBoundary } from "../components/ErrorBoundary";
 import { OfflineBanner } from "../components/OfflineBanner";
@@ -32,13 +31,12 @@ function Startup() {
   }
   return (
     <>
-      <StatusBar style="light" />
       <OfflineBanner />
       <Stack
         screenOptions={{
           headerShown: false,
           animation: "fade",
-          contentStyle: { backgroundColor: "#1A2330" },
+          contentStyle: { backgroundColor: "#F6F3EE" },
         }}
       />
     </>

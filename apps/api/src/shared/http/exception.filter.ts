@@ -12,10 +12,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const requestId = request.requestId ?? "unknown";
     const mapped = mapException(exception);
     if (mapped.status >= 500) {
+      const raw = exception instanceof Error ? exception.message : "unknown";
       logError("request failed", {
         requestId,
         errorCode: mapped.errorCode,
         name: exception instanceof Error ? exception.name : "Error",
+        reason: raw.replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]").slice(0, 300),
       });
     }
     const body: ApiFailure = {

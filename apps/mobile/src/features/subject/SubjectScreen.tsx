@@ -1,33 +1,24 @@
 import { useState } from "react";
-import { Image, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { DestinationResolveResponse, SubjectDetail } from "@atlas/contracts";
+import type { DestinationResolveResponse, SubjectDetail, TripDetail } from "@atlas/contracts";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { kindLabel } from "../../components/discovery";
 import { apiRequest } from "../../api/client";
-import { AppText, Attribution, Button, ErrorState, Screen, Skeleton } from "../../components/ui";
-import { useTheme } from "../../components/theme/ThemeProvider";
-import { space } from "../../components/theme/tokens";
+import { CityText, DarkButton, EmptyState, Photo, QuietButton } from "../city/chrome";
+import { formatPrice, kindLabel } from "../city/format";
+import { city, citySpace } from "../city/theme";
 import { friendlyError } from "../../lib/errors";
 import { SignInSheet } from "../auth/SignInSheet";
 import { useSession } from "../auth/useSession";
 
 const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-function actionLabel(place: SubjectDetail): string | null {
-  if (!place.booking?.destinationId || place.booking.capability === "unavailable") {
-    return null;
-  }
-  return place.booking.label;
-}
-
 export function SubjectScreen({ id }: { id: string }) {
   const router = useRouter();
-  const colors = useTheme();
   const { signedIn, refresh } = useSession();
   const [signIn, setSignIn] = useState(false);
-  const [imageFailed, setImageFailed] = useState(false);
+  const [pendingSave, setPendingSave] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const query = useQuery({
     queryKey: ["subject", id],
@@ -45,25 +36,38 @@ export function SubjectScreen({ id }: { id: string }) {
     enabled: signedIn,
     queryFn: async () => {
       const response = await apiRequest<{ items: { id: string; subjectId: string }[] }>("/api/v1/saves");
-      if (response.error || !response.data) {
-        return { items: [] };
-      }
+      if (response.error || !response.data) return { items: [] as { id: string; subjectId: string }[] };
+      return response.data;
+    },
+  });
+  const trips = useQuery({
+    queryKey: ["trips"],
+    enabled: signedIn,
+    queryFn: async () => {
+      const response = await apiRequest<{ items: { id: string; title: string }[] }>("/api/v1/trips");
+      if (response.error || !response.data) return { items: [] as { id: string; title: string }[] };
       return response.data;
     },
   });
   const save = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest<{ id: string }>("/api/v1/saves", {
-        method: "POST",
-        body: JSON.stringify({ subjectId: id }),
-      });
-      if (response.error || !response.data) {
-        throw new Error(response.error?.message ?? "Couldn't save this place.");
-      }
+      const response = await apiRequest<{ id: string }>("/api/v1/saves", { method: "POST", body: JSON.stringify({ subjectId: id }) });
+      if (response.error || !response.data) throw new Error(response.error?.message ?? "Couldn't save this.");
       return response.data;
     },
     onSuccess: () => {
+      setPendingSave(false);
       void saved.refetch();
+    },
+  });
+  const addToPlan = useMutation({
+    mutationFn: async (tripId: string) => {
+      const response = await apiRequest<TripDetail>(`/api/v1/trips/${tripId}/items`, {
+        method: "POST",
+        body: JSON.stringify({ subjectId: id, slot: "unscheduled" }),
+      });
+      if (response.error || !response.data) throw new Error(response.error?.message ?? "Couldn't add this to the plan.");
+      return response.data;
     },
   });
   const openDestination = useMutation({
@@ -72,129 +76,114 @@ export function SubjectScreen({ id }: { id: string }) {
         method: "POST",
         body: JSON.stringify({ destinationId }),
       });
-      if (response.error || !response.data) {
-        throw new Error(response.error?.message ?? "That link is not available.");
-      }
+      if (response.error || !response.data) throw new Error(response.error?.message ?? "That link is not available.");
       await Linking.openURL(response.data.preferredUrl);
     },
     onError: (error) => setActionError(friendlyError(error, "That link is not available.")),
   });
+
   const alreadySaved = saved.data?.items.some((item) => item.subjectId === id) ?? false;
-  const back = (
-    <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={[styles.back, { backgroundColor: colors.surface }]}>
-      <Ionicons name="chevron-back" size={18} color={colors.ink} />
-    </Pressable>
-  );
+
+  function onSave() {
+    if (!signedIn) {
+      setPendingSave(true);
+      setSignIn(true);
+      return;
+    }
+    save.mutate();
+  }
+
   if (query.isLoading) {
     return (
-      <Screen>
-        <View style={styles.page}>
-          {back}
-          <Skeleton height={280} />
-          <Skeleton height={28} width="70%" />
-          <Skeleton height={16} width="40%" />
-        </View>
-      </Screen>
+      <View style={styles.screen}>
+        <View style={styles.skeleton} />
+      </View>
     );
   }
   if (query.isError || !query.data) {
     return (
-      <Screen>
-        <View style={styles.page}>
-          {back}
-          <ErrorState title="This place did not load." body="Give it another try." onRetry={() => void query.refetch()} />
-        </View>
-      </Screen>
+      <View style={styles.screen}>
+        <EmptyState title="This didn't load" body={friendlyError(query.error, "Give it another try.")} action="Try again" onAction={() => void query.refetch()} />
+      </View>
     );
   }
+
   const place = query.data;
-  const hero = place.images?.[0]?.url;
-  const label = actionLabel(place);
+  const hero = place.images[0]?.url ?? "";
+  const price = formatPrice(place.price);
+  const action = place.booking.destinationId && place.booking.capability !== "unavailable" ? place.booking.label : null;
+  const facts = [place.rating !== null ? place.rating.toFixed(1) : null, place.reviewCount !== null ? `${place.reviewCount} notes` : null, price].filter(Boolean).join(" · ");
+
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.page}>
-        <View style={[styles.hero, { backgroundColor: colors.elevatedSurface }]}>
-          {hero && !imageFailed ? (
-            <Image accessibilityLabel={place.images?.[0]?.alt ?? place.title} source={{ uri: hero }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setImageFailed(true)} />
-          ) : null}
-          <View style={styles.scrim} />
-          <View style={styles.heroBar}>{back}</View>
-        </View>
-        <AppText role="caption" tone="muted">
-          {[place.category ?? kindLabel(place.kind), place.locality, place.countryCode].filter(Boolean).join(" · ")}
-        </AppText>
-        <AppText role="title">{place.title}</AppText>
-        {place.summary ? <AppText tone="muted">{place.summary}</AppText> : null}
-        {place.rating !== null || place.price ? (
-          <AppText role="caption" tone="muted">
-            {[
-              place.rating !== null ? place.rating.toFixed(1) : null,
-              place.price
-                ? `${place.price.currency} ${place.price.currency === "JPY" || place.price.currency === "KRW" || place.price.currency === "VND" ? place.price.amountMinor : (place.price.amountMinor / 100).toFixed(0)}`
-                : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </AppText>
-        ) : null}
-        {(place.tags?.length ?? 0) > 0 ? (
-          <AppText role="caption" tone="muted">
-            {place.tags.join(" · ")}
-          </AppText>
-        ) : null}
-        {(place.hours?.length ?? 0) > 0 ? (
-          <View style={styles.block}>
-            <AppText role="headline">Hours</AppText>
-            {place.hours.map((hour) => (
-              <AppText key={`${hour.weekday}-${hour.opens}`} role="caption" tone="muted">
-                {weekdays[hour.weekday] ?? "Day"} · {hour.opens}–{hour.closes}
-              </AppText>
-            ))}
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <View>
+          <Photo uri={hero} style={styles.hero} />
+          <View style={styles.heroBar}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.round}>
+              <Ionicons name="chevron-back" size={22} color={city.ink} />
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={alreadySaved ? "Saved" : "Save"} onPress={onSave} style={styles.round}>
+              <Ionicons name={alreadySaved ? "heart" : "heart-outline"} size={18} color={alreadySaved ? city.danger : city.ink} />
+            </Pressable>
           </View>
-        ) : null}
-        {place.startsAt ? (
-          <AppText role="caption" tone="muted">
-            {new Date(place.startsAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-          </AppText>
-        ) : null}
-        {place.phone ? <AppText role="caption" tone="muted">{place.phone}</AppText> : null}
-        {place.attribution[0] ? <Attribution text={place.attribution[0].text} /> : null}
-        <Button
-          label={alreadySaved ? "Saved" : save.isPending ? "Saving" : "Save"}
-          variant={alreadySaved ? "secondary" : "primary"}
-          disabled={save.isPending || alreadySaved}
-          onPress={() => {
-            if (!signedIn) {
-              setSignIn(true);
-              return;
-            }
-            save.mutate();
-          }}
-        />
-        {label && place.booking?.destinationId ? (
-          <Button
-            label={openDestination.isPending ? "Opening" : label}
-            variant="secondary"
-            disabled={openDestination.isPending}
-            onPress={() => {
-              setActionError(null);
-              openDestination.mutate(place.booking.destinationId as string);
-            }}
-          />
-        ) : null}
-        {actionError ? <AppText role="caption" tone="muted">{actionError}</AppText> : null}
-        {save.isError ? <AppText role="caption" tone="muted">{friendlyError(save.error, "Couldn't save this place.")}</AppText> : null}
+        </View>
+        <View style={styles.body}>
+          <CityText size="caption" tone="quiet">
+            {[kindLabel(place.kind), place.category, place.locality].filter(Boolean).join(" · ").toUpperCase()}
+          </CityText>
+          <CityText size="display">{place.title}</CityText>
+          {facts ? <CityText tone="muted">{facts}</CityText> : null}
+          {place.summary ? <CityText>{place.summary}</CityText> : null}
+          {place.hours.length > 0 ? (
+            <View style={styles.block}>
+              <CityText size="section">Hours</CityText>
+              {place.hours.map((hour) => (
+                <CityText key={`${hour.weekday}-${hour.opens}`} size="meta" tone="muted">
+                  {weekdays[hour.weekday] ?? "Day"} · {hour.opens}–{hour.closes}
+                </CityText>
+              ))}
+            </View>
+          ) : null}
+          {place.startsAt ? (
+            <CityText size="meta" tone="muted">
+              {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: place.timezone ?? undefined }).format(new Date(place.startsAt))}
+            </CityText>
+          ) : null}
+          {place.attribution[0] ? (
+            <CityText size="caption" tone="quiet">
+              {place.attribution[0].text}
+            </CityText>
+          ) : null}
+          {action && place.booking.destinationId ? <DarkButton label={openDestination.isPending ? "Opening" : action} onPress={() => openDestination.mutate(place.booking.destinationId as string)} /> : null}
+          {signedIn && trips.data && trips.data.items[0] ? (
+            <QuietButton label={`Add to ${trips.data.items[0].title}`} onPress={() => addToPlan.mutate(trips.data.items[0].id)} />
+          ) : null}
+          {actionError ? <CityText tone="muted">{actionError}</CityText> : null}
+          {save.isError ? <CityText tone="muted">{friendlyError(save.error, "Couldn't save this.")}</CityText> : null}
+          {addToPlan.isError ? <CityText tone="muted">{friendlyError(addToPlan.error, "Couldn't add this to the plan.")}</CityText> : null}
+          {addToPlan.isSuccess ? <CityText tone="muted">Added to the plan.</CityText> : null}
+        </View>
       </ScrollView>
-      <SignInSheet visible={signIn} onClose={() => setSignIn(false)} onSignedIn={() => void refresh()} />
-    </Screen>
+      <SignInSheet
+        visible={signIn}
+        onClose={() => setSignIn(false)}
+        onSignedIn={() => {
+          void refresh().then(() => {
+            if (pendingSave) save.mutate();
+          });
+        }}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { gap: space[3], paddingTop: space[3], paddingBottom: space[8] },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  hero: { height: 280, borderRadius: 24, overflow: "hidden" },
-  scrim: { position: "absolute", left: 0, right: 0, bottom: 0, height: 80, backgroundColor: "rgba(8, 9, 11, 0.35)" },
-  heroBar: { position: "absolute", top: space[3], left: space[3] },
-  block: { gap: 4 },
+  screen: { flex: 1, backgroundColor: city.page },
+  hero: { width: "100%", height: 360 },
+  heroBar: { position: "absolute", top: 52, left: 16, right: 16, flexDirection: "row", justifyContent: "space-between" },
+  round: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(246,243,238,0.94)", alignItems: "center", justifyContent: "center" },
+  body: { padding: citySpace.page, gap: 10 },
+  block: { gap: 4, marginTop: 8 },
+  skeleton: { flex: 1, margin: citySpace.page, borderRadius: 16, backgroundColor: city.photo },
 });

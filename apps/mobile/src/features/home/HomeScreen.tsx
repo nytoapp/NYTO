@@ -1,180 +1,166 @@
-import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import type { SearchResult } from "@atlas/contracts";
-import { FeaturedPlaceCard, MoodRail, PlaceCard, Rail, SectionHeader } from "../../components/discovery";
-import { AppText, Screen, SearchField, Skeleton } from "../../components/ui";
-import { useTheme } from "../../components/theme/ThemeProvider";
-import { space } from "../../components/theme/tokens";
-import { destinations, isCatalogId } from "../discovery/browse";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CityText, EmptyState, GuideFab, SectionTitle } from "../city/chrome";
+import { SubjectRailCard } from "../city/cards";
+import { localHour, localWeekday } from "../city/format";
+import { city, citySpace } from "../city/theme";
+import { destinations } from "../discovery/browse";
+import { friendlyError } from "../../lib/errors";
 import { useDiscoveryLocation } from "../location/location-store";
-import { interestsById } from "../onboarding/interests";
-import { useOnboarding } from "../onboarding/store";
-import { useSearchHandoff } from "../search/handoff";
 import { useHome } from "./useHome";
 
-const moods = [
-  { id: "eat", label: "Eat", query: "restaurants", icon: "restaurant-outline" },
-  { id: "drink", label: "Drink", query: "bars", icon: "wine-outline" },
-  { id: "do", label: "Do", query: "things to do", icon: "walk-outline" },
-  { id: "events", label: "Events", query: "events", icon: "ticket-outline" },
-  { id: "stay", label: "Stay", query: "hotels", icon: "bed-outline" },
-] as const;
-
-function forYouLine(): string {
-  const hour = new Date().getHours();
-  if (hour < 11) return "This morning, for you";
-  if (hour < 17) return "This afternoon, for you";
-  return "Tonight, for you";
+function greeting(hour: number): string {
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 }
 
 export function HomeScreen() {
-  const colors = useTheme();
   const router = useRouter();
-  const home = useHome();
+  const insets = useSafeAreaInsets();
   const selected = useDiscoveryLocation((state) => state.selected);
   const setSelected = useDiscoveryLocation((state) => state.setSelected);
-  const ask = useSearchHandoff((state) => state.ask);
-  const chosen = interestsById(useOnboarding((state) => state.interests));
-  const [draft, setDraft] = useState("");
-  const rail = home.data?.rails.find((item) => item.items.length > 0);
-  const featured = rail?.items[0];
-  const rest = rail?.items.slice(1) ?? [];
-  const city = selected?.label ?? home.data?.locationLabel ?? "Nearby";
-
-  function openSearch(next: string) {
-    const trimmed = next.trim();
-    if (!trimmed) {
-      router.push("/search");
-      return;
-    }
-    ask(trimmed);
-    router.push("/search");
-  }
-
-  function openItem(item: SearchResult) {
-    if (isCatalogId(item.id)) {
-      router.push(`/subject/${item.id}`);
-    }
-  }
+  const home = useHome();
+  const zone = home.data?.timezone ?? selected?.timezone ?? null;
+  const hour = localHour(zone);
+  const place = home.data?.locationLabel ?? selected?.label ?? "your city";
 
   return (
-    <Screen>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+    <View style={styles.screen}>
+      <StatusBar style="dark" />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}>
         <View style={styles.mast}>
-          <AppText role="brand" tone="tertiary">
-            CITYDAY
-          </AppText>
-          <AppText role="title">{city}</AppText>
-          <View style={styles.cities}>
+          <View style={styles.brandRow}>
+            <CityText size="caption" tone="quiet">
+              CITYDAY
+            </CityText>
+            <Pressable accessibilityRole="button" accessibilityLabel="Profile" onPress={() => router.push("/profile")} style={styles.bell}>
+              <Ionicons name="person-outline" size={20} color={city.ink} />
+            </Pressable>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cities}>
             {destinations.map((destination) => {
               const on = destination.location ? selected?.id === destination.location.id : selected === null;
               return (
-                <Pressable key={destination.label} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => setSelected(destination.location)}>
-                  <AppText role="label" tone={on ? "ink" : "tertiary"}>
+                <Pressable
+                  key={destination.label}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={`Browse ${destination.label}`}
+                  onPress={() => setSelected(destination.location)}
+                  style={[styles.cityChip, on && styles.cityChipOn]}
+                >
+                  <CityText size="meta" tone={on ? "onDark" : "ink"}>
                     {destination.label}
-                  </AppText>
+                  </CityText>
                 </Pressable>
               );
             })}
+          </ScrollView>
+          <CityText size="display" style={styles.hello}>
+            {greeting(hour)}
+          </CityText>
+          <CityText tone="muted">
+            {place} · {localWeekday(zone)}
+          </CityText>
+        </View>
+
+        <Pressable accessibilityRole="search" accessibilityLabel="Search the city" onPress={() => router.push("/search")} style={styles.search}>
+          <Ionicons name="search-outline" size={18} color={city.quiet} />
+          <CityText tone="quiet">What do you want to do?</CityText>
+        </Pressable>
+
+        <Pressable accessibilityRole="button" accessibilityLabel="Build my evening" onPress={() => router.push("/evening")} style={styles.plan}>
+          <CityText size="section">Build my evening</CityText>
+          <CityText size="meta" tone="muted">
+            A search for the kind of night you want.
+          </CityText>
+        </Pressable>
+
+        {home.isLoading ? (
+          <View style={styles.pad}>
+            <View style={styles.skeleton} />
+            <View style={styles.skeletonShort} />
           </View>
-        </View>
-
-        <View style={styles.intro}>
-          <AppText role="headlineMedium">{forYouLine()}</AppText>
-          <AppText tone="muted">A few places worth deciding on.</AppText>
-        </View>
-
-        <SearchField value={draft} onChangeText={setDraft} placeholder="Search the city" onSubmit={() => openSearch(draft)} />
-
-        {home.isLoading ? <Skeleton height={280} /> : null}
+        ) : null}
 
         {home.isError ? (
-          <View style={styles.notice}>
-            <View style={[styles.rule, { backgroundColor: colors.accent }]} />
-            <AppText role="headline">Nothing good came through yet.</AppText>
-            <AppText tone="muted">Try another area, or search the city directly.</AppText>
-            <Pressable accessibilityRole="button" accessibilityLabel="Try again" onPress={() => void home.refetch()} style={styles.retry}>
-              <AppText role="label" tone="accent">
-                Try again
-              </AppText>
-            </Pressable>
-          </View>
+          <EmptyState title="The city guide didn't load" body={friendlyError(home.error, "The catalog could not be reached. Try again.")} action="Try again" onAction={() => void home.refetch()} />
         ) : null}
 
-        {featured ? <FeaturedPlaceCard item={featured} reason={rail?.title ?? city} onPress={() => openItem(featured)} /> : null}
-
-        {home.data && !home.isLoading && !home.isError && !featured ? (
-          <View style={styles.notice}>
-            <View style={[styles.rule, { backgroundColor: colors.accent }]} />
-            <AppText role="headline">Your next place starts here.</AppText>
-            <AppText tone="muted">Explore the city and save what catches your eye.</AppText>
-            <Pressable accessibilityRole="button" accessibilityLabel="Explore places" onPress={() => router.push("/search")} style={styles.retry}>
-              <AppText role="label" tone="accent">
-                Explore places
-              </AppText>
-            </Pressable>
-          </View>
-        ) : null}
-
-        <View>
-          <SectionHeader title="Explore" />
-          <MoodRail items={moods.map((item) => ({ id: item.id, label: item.label, icon: item.icon }))} onPress={(id) => {
-            const mood = moods.find((item) => item.id === id);
-            if (mood) openSearch(mood.query);
-          }} />
-        </View>
-
-        {rest.length > 0 ? (
-          <View>
-            <SectionHeader title="Also nearby" />
-            <Rail>
-              {rest.map((item) => (
-                <PlaceCard key={item.id} item={item} onPress={() => openItem(item)} />
-              ))}
-            </Rail>
-          </View>
-        ) : null}
-
-        {chosen.length > 0 ? (
-          <View style={styles.stack}>
-            <SectionHeader title="From your interests" />
-            {chosen.map((item) => (
-              <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label} onPress={() => openSearch(item.query)} style={[styles.interest, { borderColor: colors.divider }]}>
-                <AppText role="bodyLarge">{item.label}</AppText>
+        {home.data && home.data.explore.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcuts}>
+            {home.data.explore.map((item) => (
+              <Pressable key={item.slug} accessibilityRole="button" accessibilityLabel={item.label} onPress={() => router.push({ pathname: "/results", params: { q: item.label } })} style={styles.shortcut}>
+                <CityText size="meta">{item.label}</CityText>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         ) : null}
 
-        <Pressable accessibilityRole="button" accessibilityLabel="Build your evening" onPress={() => router.push("/trips")} style={[styles.plan, { borderTopColor: colors.divider }]}>
-          <AppText role="brand" tone="tertiary">
-            BUILD YOUR EVENING
-          </AppText>
-          {["Dinner", "Drinks", "Event"].map((item, index) => (
-            <View key={item} style={styles.step}>
-              <AppText role="caption" tone="tertiary">
-                {String(index + 1).padStart(2, "0")}
-              </AppText>
-              <AppText role="headline">{item}</AppText>
-            </View>
-          ))}
+        {home.data?.rails.map((rail) => (
+          <View key={rail.key} style={styles.railBlock}>
+            <SectionTitle title={rail.title} />
+            {rail.items.length === 0 ? (
+              <View style={styles.pad}>
+                <CityText tone="muted">Nothing is published on this rail yet.</CityText>
+              </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
+                {rail.items.map((item) => (
+                  <SubjectRailCard key={item.id} item={item} />
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        ))}
+
+        {home.data && home.data.rails.every((rail) => rail.items.length === 0) ? (
+          <EmptyState title="This city is still quiet" body="The catalog has no places for this location yet. Search still uses the same guide." action="Search" onAction={() => router.push("/search")} />
+        ) : null}
+
+        <Pressable accessibilityRole="button" accessibilityLabel="Open the map" onPress={() => router.push({ pathname: "/map", params: { q: "things to do" } })} style={styles.mapLink}>
+          <Ionicons name="map-outline" size={18} color={city.ink} />
+          <CityText size="section">Map</CityText>
         </Pressable>
       </ScrollView>
-    </Screen>
+      <GuideFab from="Home" />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { gap: space[5], paddingBottom: space[8] },
-  mast: { gap: 4, paddingTop: space[2] },
-  cities: { flexDirection: "row", gap: space[4], marginTop: space[2] },
-  intro: { gap: space[2] },
-  stack: { gap: space[2] },
-  notice: { gap: space[2], paddingVertical: space[2] },
-  rule: { width: 28, height: 2, borderRadius: 1 },
-  retry: { minHeight: 44, justifyContent: "center" },
-  interest: { borderBottomWidth: StyleSheet.hairlineWidth, minHeight: 52, justifyContent: "center" },
-  plan: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space[5], gap: space[3] },
-  step: { flexDirection: "row", alignItems: "baseline", gap: space[3] },
+  screen: { flex: 1, backgroundColor: city.page },
+  mast: { paddingHorizontal: citySpace.page },
+  brandRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  bell: { width: 44, height: 44, alignItems: "flex-end", justifyContent: "center" },
+  cities: { gap: 8, paddingVertical: 8 },
+  cityChip: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: city.chip },
+  cityChipOn: { backgroundColor: city.ink },
+  hello: { marginTop: 18 },
+  search: {
+    marginTop: 18,
+    marginHorizontal: citySpace.page,
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: city.paper,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: city.line,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+  },
+  plan: { marginTop: 14, marginHorizontal: citySpace.page, gap: 4 },
+  shortcuts: { paddingHorizontal: citySpace.page, gap: 8, paddingVertical: 18 },
+  shortcut: { borderRadius: 999, backgroundColor: city.chip, paddingHorizontal: 14, paddingVertical: 8 },
+  railBlock: { marginBottom: 22 },
+  rail: { paddingHorizontal: citySpace.page, gap: 14 },
+  pad: { paddingHorizontal: citySpace.page, gap: 10 },
+  skeleton: { height: 150, borderRadius: 16, backgroundColor: city.photo, marginTop: 20 },
+  skeletonShort: { height: 18, width: "46%", borderRadius: 8, backgroundColor: city.photo },
+  mapLink: { marginTop: 8, marginHorizontal: citySpace.page, minHeight: 52, flexDirection: "row", alignItems: "center", gap: 10 },
 });

@@ -175,7 +175,7 @@ export class IdentityService {
   }
 
   private async issueChallenge(channel: "phone" | "email", target: string, requestId: string, pendingPasswordHash: string | null = null) {
-    const code = newOtpCode();
+    const code = this.env.NODE_ENV === "development" && this.env.AUTH_LOG_DEV_OTP ? "123456" : newOtpCode();
     const created = await this.repository.insertChallenge(channel, target, hashOtp(code, this.env.AUTH_REFRESH_PEPPER), pendingPasswordHash);
     if (this.env.AUTH_LOG_DEV_OTP && this.env.NODE_ENV === "development") {
       console.log(JSON.stringify({ level: "info", message: "dev auth code", requestId, channel, challengeId: created.id, code }));

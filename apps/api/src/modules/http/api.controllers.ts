@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
 import Redis from "ioredis";
 import type { Request } from "express";
@@ -50,8 +50,8 @@ function envelope<T>(request: Request, data: T) {
 @Controller("v1")
 export class HealthController {
   constructor(
-    private readonly database: Database,
-    private readonly redis: Redis,
+    @Inject(Database) private readonly database: Database,
+    @Inject(Redis) private readonly redis: Redis,
   ) {}
 
   @Get("health")
@@ -83,7 +83,7 @@ async function pingRedis(redis: Redis): Promise<boolean> {
 
 @Controller("v1/auth")
 export class AuthController {
-  constructor(private readonly identity: IdentityService) {}
+  constructor(@Inject(IdentityService) private readonly identity: IdentityService) {}
 
   @Post("phone/start")
   async startPhone(@Req() request: Request, @Body() body: unknown) {
@@ -149,7 +149,7 @@ export class AuthController {
 
 @Controller("v1/geo")
 export class GeoController {
-  constructor(private readonly geo: GeoService) {}
+  constructor(@Inject(GeoService) private readonly geo: GeoService) {}
 
   @Get("suggest")
   async suggest(@Req() request: Request, @Query("q") q = "", @Query("country") country?: string) {
@@ -169,7 +169,7 @@ export class GeoController {
 
 @Controller("v1/search")
 export class SearchController {
-  constructor(private readonly search: SearchService) {}
+  constructor(@Inject(SearchService) private readonly search: SearchService) {}
 
   @Post()
   async run(@Req() request: Request, @Body() body: unknown, @CurrentUser() user: Request["user"]) {
@@ -185,7 +185,7 @@ export class SearchController {
 
 @Controller("v1/home")
 export class HomeController {
-  constructor(private readonly home: HomeService) {}
+  constructor(@Inject(HomeService) private readonly home: HomeService) {}
 
   @Get()
   async load(@Req() request: Request, @Query("selectedLocationId") selectedLocationId?: string, @Query("locale") locale = "en") {
@@ -195,7 +195,7 @@ export class HomeController {
 
 @Controller("v1/destinations")
 export class DestinationsController {
-  constructor(private readonly destinations: DestinationsService) {}
+  constructor(@Inject(DestinationsService) private readonly destinations: DestinationsService) {}
 
   @Post("resolve")
   async resolve(@Req() request: Request, @Body() body: unknown) {
@@ -206,7 +206,7 @@ export class DestinationsController {
 
 @Controller("v1/subjects")
 export class SubjectsController {
-  constructor(private readonly database: Database) {}
+  constructor(@Inject(Database) private readonly database: Database) {}
 
   @Get(":id")
   async get(@Req() request: Request, @Param("id") id: string, @Query("locale") locale = "en") {
@@ -221,7 +221,7 @@ export class SubjectsController {
 @Controller("v1/saves")
 @UseGuards(RequireAuthGuard)
 export class SavesController {
-  constructor(private readonly library: LibraryService) {}
+  constructor(@Inject(LibraryService) private readonly library: LibraryService) {}
 
   @Get()
   async list(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>) {
@@ -238,7 +238,7 @@ export class SavesController {
 @Controller("v1/collections")
 @UseGuards(RequireAuthGuard)
 export class CollectionsController {
-  constructor(private readonly library: LibraryService) {}
+  constructor(@Inject(LibraryService) private readonly library: LibraryService) {}
 
   @Get()
   async list(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>) {
@@ -258,7 +258,7 @@ export class CollectionsController {
 @Controller("v1/recent")
 @UseGuards(RequireAuthGuard)
 export class RecentController {
-  constructor(private readonly library: LibraryService) {}
+  constructor(@Inject(LibraryService) private readonly library: LibraryService) {}
 
   @Post()
   async create(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>, @Body() body: unknown) {
@@ -274,7 +274,7 @@ export class RecentController {
 @Controller("v1/trips")
 @UseGuards(RequireAuthGuard)
 export class TripsController {
-  constructor(private readonly trips: TripsService) {}
+  constructor(@Inject(TripsService) private readonly trips: TripsService) {}
 
   @Get()
   async list(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>) {
@@ -303,7 +303,7 @@ export class TripsController {
 @UseGuards(RequireAuthGuard, RolesGuard)
 @Roles("admin")
 export class AdminController {
-  constructor(private readonly overviewService: AdminOverviewService) {}
+  constructor(@Inject(AdminOverviewService) private readonly overviewService: AdminOverviewService) {}
 
   @Get("status")
   status(@Req() request: Request) {
