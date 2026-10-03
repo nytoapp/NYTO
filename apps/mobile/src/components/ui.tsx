@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { motion } from "../features/city/theme";
 import { hitTarget, pageInset, radius, space, type, typeStyle } from "./theme/tokens";
 import { useTheme } from "./theme/ThemeProvider";
 
@@ -71,9 +72,9 @@ export function Button({
       style={({ pressed }) => [
         styles.button,
         {
-          backgroundColor: disabled ? colors.surfacePressed : primary ? colors.paper : "transparent",
-          borderColor: disabled ? colors.border : primary ? colors.paper : colors.border,
-          transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
+          backgroundColor: disabled ? colors.accentSoft : primary ? colors.accent : "transparent",
+          borderColor: disabled ? colors.border : primary ? colors.accent : colors.border,
+          transform: [{ scale: pressed && !disabled ? motion.pressScale : 1 }],
         },
       ]}
     >
@@ -81,7 +82,7 @@ export function Button({
         allowFontScaling
         style={[
           typeStyle("label"),
-          { color: disabled ? colors.tertiaryText : primary ? colors.paperInk : colors.primaryText },
+          { color: disabled ? colors.mutedText : primary ? colors.onAccent : colors.primaryText },
         ]}
       >
         {label}
@@ -282,14 +283,24 @@ export function Dialog({
 
 export function Skeleton({ height = 72, width = "100%" }: { height?: number; width?: number | `${number}%` }) {
   const colors = useTheme();
-  return <View accessibilityLabel="Loading" style={[styles.skeleton, { height, width, backgroundColor: colors.elevatedSurface }]} />;
+  return <View accessibilityLabel="Loading" style={[styles.skeleton, { height, width, backgroundColor: colors.imagePlaceholder }]} />;
 }
 
-export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
+export function EmptyState({
+  title,
+  body,
+  action,
+  icon,
+}: {
+  title: string;
+  body: string;
+  action?: ReactNode;
+  icon?: keyof typeof Ionicons.glyphMap;
+}) {
   const colors = useTheme();
   return (
     <View style={styles.block}>
-      <View style={[styles.rule, { backgroundColor: colors.accent }]} />
+      {icon ? <Ionicons name={icon} size={22} color={colors.secondaryText} /> : <View style={[styles.rule, { backgroundColor: colors.accent }]} />}
       <AppText role="headlineMedium">{title}</AppText>
       <AppText tone="muted">{body}</AppText>
       {action}
@@ -297,11 +308,21 @@ export function EmptyState({ title, body, action }: { title: string; body: strin
   );
 }
 
-export function ErrorState({ title, body, onRetry }: { title: string; body: string; onRetry?: () => void }) {
+export function ErrorState({
+  title,
+  body,
+  onRetry,
+  icon,
+}: {
+  title: string;
+  body: string;
+  onRetry?: () => void;
+  icon?: keyof typeof Ionicons.glyphMap;
+}) {
   const colors = useTheme();
   return (
     <View style={styles.block}>
-      <View style={[styles.rule, { backgroundColor: colors.accent }]} />
+      {icon ? <Ionicons name={icon} size={22} color={colors.error} /> : <View style={[styles.rule, { backgroundColor: colors.accent }]} />}
       <AppText role="headline">{title}</AppText>
       <AppText tone="muted">{body}</AppText>
       {onRetry ? (

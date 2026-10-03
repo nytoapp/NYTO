@@ -1,4 +1,4 @@
-import { createParamDecorator, type ExecutionContext, Injectable, type CanActivate, SetMetadata } from "@nestjs/common";
+import { createParamDecorator, type ExecutionContext, Inject, Injectable, type CanActivate, SetMetadata } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { ErrorCodes } from "@atlas/contracts";
 import type { Request } from "express";
@@ -24,7 +24,7 @@ export class RequireAuthGuard implements CanActivate {
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
     const roles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [context.getHandler(), context.getClass()]) ?? [];

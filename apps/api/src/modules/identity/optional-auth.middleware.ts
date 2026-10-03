@@ -1,4 +1,4 @@
-import { Injectable, type NestMiddleware } from "@nestjs/common";
+import { Inject, Injectable, type NestMiddleware } from "@nestjs/common";
 import { loadEnv } from "@atlas/config";
 import type { NextFunction, Request, Response } from "express";
 import { readAccessToken } from "./crypto";
@@ -6,7 +6,7 @@ import { IdentityRepository } from "./identity.repository";
 
 @Injectable()
 export class OptionalAuthMiddleware implements NestMiddleware {
-  constructor(private readonly repository: IdentityRepository) {}
+  constructor(@Inject(IdentityRepository) private readonly repository: IdentityRepository) {}
 
   async use(request: Request, _response: Response, next: NextFunction): Promise<void> {
     const header = request.header("authorization");

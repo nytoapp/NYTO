@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import NetInfo from "@react-native-community/netinfo";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
-import { AppText } from "./ui";
-import { useTheme } from "./theme/ThemeProvider";
+import { color, font, fontScaleCap, space } from "../features/city/theme";
 
 export function OfflineBanner() {
   const { t } = useTranslation();
-  const colors = useTheme();
   const insets = useSafeAreaInsets();
   const [offline, setOffline] = useState(false);
   useEffect(() => {
@@ -20,19 +18,15 @@ export function OfflineBanner() {
     return null;
   }
   return (
-    <View style={[styles.bar, { backgroundColor: colors.paper, paddingTop: insets.top + 6 }]}>
-      <AppText role="caption" tone="onPaper">
+    <View style={[styles.bar, { paddingTop: insets.top + space[8] }]}>
+      <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, styles.label]}>
         {t("offline")}
-      </AppText>
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: { paddingBottom: 8, paddingHorizontal: 16 },
+  bar: { paddingBottom: space[8], paddingHorizontal: space[16], backgroundColor: color.accent },
+  label: { color: color.onAccent },
 });
-
-
-
-
-

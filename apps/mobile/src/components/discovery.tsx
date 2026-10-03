@@ -2,11 +2,10 @@ import type { SearchResult } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
 import { type ReactNode, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { color } from "../features/city/theme";
 import { radius, space } from "./theme/tokens";
 import { useTheme } from "./theme/ThemeProvider";
 import { AppText, Attribution, Skeleton } from "./ui";
-
-const washes = ["#161920", "#12151C", "#1A1E28", "#141820"] as const;
 
 export function kindLabel(kind: string): string {
   if (kind === "accommodation") return "Stay";
@@ -15,9 +14,8 @@ export function kindLabel(kind: string): string {
   return kind.slice(0, 1).toUpperCase() + kind.slice(1);
 }
 
-function wash(title: string): string {
-  const index = title.length % washes.length;
-  return washes[index] ?? washes[0];
+function wash(): string {
+  return color.imagePlaceholder;
 }
 
 export function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
@@ -37,7 +35,7 @@ export function SectionHeader({ title, action, onAction }: { title: string; acti
 
 export function ArtPlate({ title, kind, height, caption }: { title: string; kind: string; height: number; caption?: string }) {
   return (
-    <View accessibilityLabel={title} style={[styles.plate, { height, backgroundColor: wash(title) }]}>
+    <View accessibilityLabel={title} style={[styles.plate, { height, backgroundColor: wash() }]}>
       <View style={styles.glow} />
       <View style={styles.plateCopy}>
         {caption ? (
@@ -336,7 +334,7 @@ const styles = StyleSheet.create({
   heroPress: { borderRadius: radius.large },
   hero: { height: 300, borderRadius: radius.large, justifyContent: "flex-end", overflow: "hidden" },
   heroCopy: { position: "absolute", left: space[5], right: space[5], bottom: space[5], gap: 6 },
-  scrim: { position: "absolute", left: 0, right: 0, bottom: 0, height: 160, backgroundColor: "rgba(8, 9, 11, 0.55)" },
+  scrim: { position: "absolute", left: 0, right: 0, bottom: 0, height: 160, backgroundColor: color.overlay },
   place: { width: 168, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, overflow: "hidden" },
   placeImage: { height: 112 },
   placeCopy: { padding: space[3], gap: 4 },
