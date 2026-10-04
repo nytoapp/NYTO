@@ -16,6 +16,7 @@ export const limits = {
   recentViewCap: 50,
   dedupeDistanceMeters: 75,
   defaultRadiusMeters: 5_000,
+  cityBrowseRadiusMeters: 15_000,
   maxRadiusMeters: 50_000,
   destinationHandleTtlSeconds: 15 * 60,
   bodyLimitBytes: 32 * 1024,

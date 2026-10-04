@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
 import Redis from "ioredis";
 import type { Request } from "express";
@@ -22,6 +22,7 @@ import type { ZodType } from "zod";
 import { Database } from "../../shared/db/database";
 import { CurrentUser, RequireAuthGuard, Roles, RolesGuard } from "../../shared/http/auth.guard";
 import { AppError } from "../../shared/http/app-error";
+import { IdentityRepository } from "../identity/identity.repository";
 import { IdentityService } from "../identity/identity.service";
 import { GeoService } from "../geo/geo.service";
 import { SearchService } from "../search/search.service";
@@ -147,6 +148,39 @@ export class AuthController {
   }
 }
 
+function readDisplayName(body: unknown): string {
+  const value = (body as { displayName?: unknown } | null)?.displayName;
+  if (typeof value !== "string") {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, "Enter your name.", 422);
+  }
+  const name = value.trim().replace(/\s+/g, " ");
+  if (name.length < 1 || name.length > 40 || !/^[\p{L}][\p{L}\s'.-]*$/u.test(name)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, "Enter your name using letters.", 422);
+  }
+  return name;
+}
+
+@Controller("v1/account")
+@UseGuards(RequireAuthGuard)
+export class AccountController {
+  constructor(@Inject(IdentityRepository) private readonly identity: IdentityRepository) {}
+
+  @Get()
+  async load(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>) {
+    return envelope(request, await this.identity.accountFor(user.userId));
+  }
+
+  @Patch()
+  async update(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>, @Body() body: unknown) {
+    const displayName = readDisplayName(body);
+    const saved = await this.identity.setDisplayName(user.userId, displayName);
+    if (!saved) {
+      throw new AppError(ErrorCodes.NOT_FOUND, "That account is not available.", 404);
+    }
+    return envelope(request, await this.identity.accountFor(user.userId));
+  }
+}
+
 @Controller("v1/geo")
 export class GeoController {
   constructor(@Inject(GeoService) private readonly geo: GeoService) {}
@@ -232,6 +266,12 @@ export class SavesController {
   async create(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>, @Body() body: unknown) {
     const input = parseBody(saveRequestSchema, body);
     return envelope(request, await this.library.save(user.userId, input.subjectId, input.occurrenceId ?? null));
+  }
+
+  @Delete(":subjectId")
+  async remove(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>, @Param("subjectId") subjectId: string) {
+    await this.library.remove(user.userId, subjectId);
+    return envelope(request, { removed: true });
   }
 }
 

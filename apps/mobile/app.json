@@ -39,7 +39,8 @@
       "translucent": true
     },
     "android": {
-      "package": "com.atlas.discovery"
+      "package": "com.atlas.discovery",
+      "softwareKeyboardLayoutMode": "resize"
     }
   }
 }

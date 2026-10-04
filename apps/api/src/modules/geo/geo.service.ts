@@ -7,13 +7,18 @@ export class GeoService {
   constructor(private readonly pool: Pool) {}
 
   async suggest(query: string, countryCode: string | null): Promise<LocationCandidate[]> {
+    const trimmed = query.trim();
     const result = await this.pool.query(
       `select id, label, country_code, timezone, ST_Y(geog::geometry) as latitude, ST_X(geog::geometry) as longitude
        from resolved_locations
-       where label ilike $1 and ($2::text is null or country_code = $2)
+       where ($2::text is null or country_code = $2)
+         and (
+           ($1 = '' and kind = 'locality')
+           or ($1 <> '' and label ilike $1 || '%')
+         )
        order by label
        limit 8`,
-      [`${query}%`, countryCode],
+      [trimmed, countryCode],
     );
     return result.rows.map(mapRow);
   }

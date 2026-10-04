@@ -26,6 +26,10 @@ export class LibraryService {
     }
   }
 
+  async remove(userId: string, subjectId: string): Promise<void> {
+    await this.pool.query(`delete from saved_items where user_id = $1 and subject_id = $2`, [userId, subjectId]);
+  }
+
   async listSaves(userId: string): Promise<{ id: string; subjectId: string }[]> {
     const result = await this.pool.query(
       `select s.id, s.subject_id from saved_items s

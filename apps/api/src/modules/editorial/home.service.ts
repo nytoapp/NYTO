@@ -1,3 +1,4 @@
+import { limits } from "@atlas/config";
 import type { Pool } from "pg";
 import type { HomeResponse } from "@atlas/contracts";
 import { emptyCatalogFacts, loadCatalogFacts, type CatalogFacts } from "../catalog/facts";
@@ -20,15 +21,21 @@ export class HomeService {
       location?.rows[0] && location.rows[0].latitude !== null
         ? { latitude: Number(location.rows[0].latitude), longitude: Number(location.rows[0].longitude) }
         : null;
-    const items = await this.pool.query(
-      `select d.subject_id, d.kind, d.title, ST_Y(d.geog::geometry) as latitude, ST_X(d.geog::geometry) as longitude
-       from search_documents d
-       join catalog_subjects s on s.id = d.subject_id and s.deleted_at is null and s.status = 'active'
-       where d.locale = $1 and d.occurrence_id is null and ($2::text is null or d.country_code = $2)
-       order by d.title
-       limit 6`,
-      [locale, country],
-    );
+    const items = origin
+      ? await this.pool.query(
+          `select d.subject_id, d.kind, d.title, ST_Y(d.geog::geometry) as latitude, ST_X(d.geog::geometry) as longitude
+           from search_documents d
+           join catalog_subjects s on s.id = d.subject_id and s.deleted_at is null and s.status = 'active'
+           where d.locale = $1
+             and d.occurrence_id is null
+             and d.country_code = $2
+             and d.geog is not null
+             and ST_DWithin(d.geog, ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography, $5)
+           order by d.title
+           limit 6`,
+          [locale, country, origin.longitude, origin.latitude, limits.cityBrowseRadiusMeters],
+        )
+      : { rows: [] };
     let facts = new Map<string, CatalogFacts>();
     try {
       facts = await loadCatalogFacts(
@@ -44,6 +51,11 @@ export class HomeService {
       `select c.slug, ct.name from categories c
        join category_translations ct on ct.category_id = c.id and ct.locale = 'en'
        where c.deleted_at is null and c.status = 'active'
+         and exists (
+           select 1 from subject_categories sc
+           join catalog_subjects s on s.id = sc.subject_id and s.deleted_at is null and s.status = 'active'
+           where sc.category_id = c.id
+         )
        order by c.sort_order limit 6`,
     );
     return {

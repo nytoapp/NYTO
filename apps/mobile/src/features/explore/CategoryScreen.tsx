@@ -21,7 +21,7 @@ export function CategoryScreen() {
     if (query) search.mutate(query);
   }, [query, search.mutate]);
 
-  const results = search.data?.data?.results ?? [];
+  const results = search.isSuccess && Array.isArray(search.data?.data?.results) ? search.data.data.results : [];
 
   return (
     <View style={styles.screen}>
@@ -41,7 +41,7 @@ export function CategoryScreen() {
         <View style={styles.list}>
           {search.isPending ? <View style={styles.skeleton} /> : null}
           {search.isError ? <EmptyState title="This category didn't load" body={friendlyError(search.error)} action="Try again" onAction={() => search.mutate(query)} /> : null}
-          {!search.isPending && results.length === 0 ? <EmptyState title="Nothing in this category" body="The catalog has no matches for that search." /> : null}
+          {search.isSuccess && results.length === 0 ? <EmptyState title="Nothing in this category" body="The catalog has no matches for that search." /> : null}
           {results.map((item) => (
             <SubjectResultCard key={item.id} item={item} />
           ))}

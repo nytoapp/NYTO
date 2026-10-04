@@ -9,7 +9,7 @@ import { useDiscoveryLocation } from "../location/location-store";
 export function JourneyScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const label = useDiscoveryLocation((state) => state.selected?.label) ?? "this city";
+  const label = useDiscoveryLocation((state) => state.selected?.label) ?? "the city you choose";
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 24, paddingBottom: Math.max(insets.bottom, 16) }]}>

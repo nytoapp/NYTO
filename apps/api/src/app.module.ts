@@ -34,6 +34,7 @@ import { FlagsModule } from "./modules/flags/flags.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { PrivacyModule } from "./modules/privacy/privacy.module";
 import {
+  AccountController,
   AdminController,
   AuthController,
   CollectionsController,
@@ -65,6 +66,7 @@ import {
   controllers: [
     HealthController,
     AuthController,
+    AccountController,
     GeoController,
     SearchController,
     HomeController,

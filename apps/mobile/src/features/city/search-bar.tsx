@@ -63,7 +63,7 @@ export function SearchBar({
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onSubmitEditing={onSubmit}
-          style={[font.body, { flex: 1, color: color.primaryText, paddingVertical: 0 }]}
+          style={{ flex: 1, height: 40, fontSize: 16, color: color.primaryText, paddingVertical: 0, margin: 0, includeFontPadding: false, textAlignVertical: "center" }}
         />
       ) : (
         <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} numberOfLines={1} style={[font.body, { flex: 1, color: value ? color.primaryText : color.mutedText }]}>

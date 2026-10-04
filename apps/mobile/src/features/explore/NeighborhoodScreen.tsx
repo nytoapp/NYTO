@@ -20,7 +20,7 @@ export function NeighborhoodScreen() {
     if (name) search.mutate(name);
   }, [name, search.mutate]);
 
-  const results = search.data?.data?.results ?? [];
+  const results = search.isSuccess && Array.isArray(search.data?.data?.results) ? search.data.data.results : [];
 
   return (
     <View style={styles.screen}>
@@ -33,7 +33,7 @@ export function NeighborhoodScreen() {
         <CityText tone="muted">Results for this area come from the same city search.</CityText>
         <View style={styles.list}>
           {search.isError ? <EmptyState title="This area didn't load" body="Try the search again." action="Try again" onAction={() => search.mutate(name)} /> : null}
-          {!search.isPending && results.length === 0 ? <EmptyState title="Nothing published here" body="The catalog has no matches for that name." /> : null}
+          {search.isSuccess && results.length === 0 ? <EmptyState title="Nothing published here" body="The catalog has no matches for that name." /> : null}
           {results.map((item) => (
             <SubjectResultCard key={item.id} item={item} />
           ))}
