@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
+import { buildResultFilters } from "@atlas/contracts";
 import { interpretWithRules } from "../src/modules/search/rules-intent";
 import { resolveTimeWindow } from "../src/modules/search/time-window";
 import { dedupeObservations, type Observation } from "../src/modules/search/dedupe";
@@ -67,6 +68,32 @@ describe("rules intent", () => {
     expect(intent.kinds).toEqual([]);
     expect(intent.location).toEqual({ mode: "text", text: "Paris" });
     expect(intent.timeWindow.kind).toBe("weekend");
+  });
+
+  it.each(["Restaurants", "Restaurants tonight", "restaurant tonight", "Tonight", "Food Tonight"])(
+    "represents tonight once for %s",
+    (query) => {
+      const parsed = interpretWithRules(query, "en");
+      const filters = buildResultFilters({ query, intent: parsed, sort: "recommended" });
+      expect(filters.filter((filter) => filter.key === "tonight")).toHaveLength(1);
+      expect(new Set(filters.map((filter) => filter.key)).size).toBe(filters.length);
+    },
+  );
+
+  it("turns catalog questions into constraints instead of required leftover words", () => {
+    expect(interpretWithRules("Best restaurants", "en")).toMatchObject({
+      categorySlugs: ["restaurant"],
+      freeText: "",
+    });
+    expect(interpretWithRules("Something cultural", "en")).toMatchObject({
+      categorySlugs: ["culture"],
+      freeText: "",
+    });
+    const tonight = interpretWithRules("What should I do tonight?", "en");
+    expect(tonight.kinds).toEqual(["place"]);
+    expect(tonight.timeWindow.kind).toBe("tonight");
+    expect(tonight.freeText).toBe("");
+    expect(interpretWithRules("Date night", "en").freeText).toBe("Date night");
   });
 
   it("keeps keyword searches on the standard path", () => {

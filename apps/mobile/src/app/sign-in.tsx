@@ -5,6 +5,7 @@ import {
   Animated,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -17,9 +18,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useMutation } from "@tanstack/react-query";
+import { getLocales } from "expo-localization";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest, writeAccessToken } from "../api/client";
-import { countryFlag } from "../features/auth/countries";
+import { useQueryClient } from "@tanstack/react-query";
+import { loadAccount } from "../features/auth/account";
+import { countryFlag, matchCountries, nationalNumber, phoneReady, suggestPhoneCountry, type PhoneCountry } from "../features/auth/countries";
 import { signInWithGoogle } from "../features/auth/google";
 import { useAuth } from "../features/auth/session";
 import { useOnboarding } from "../features/onboarding/store";
@@ -32,7 +36,6 @@ const quiet = "#A39E96";
 const line = "#E4E0D8";
 const field = "#FFFFFF";
 const danger = "#9C3B32";
-const indiaDial = "91";
 
 const googleMark = require("../../assets/auth/google-g.png");
 
@@ -59,16 +62,14 @@ function device() {
   return { platform, label: "CITYDAY" } as const;
 }
 
-function indiaNational(input: string): string {
+function digitsFor(country: PhoneCountry, input: string): string {
   let digits = input.replace(/\D/g, "");
-  if (digits.startsWith(indiaDial) && digits.length > 10) digits = digits.slice(indiaDial.length);
-  if (digits.startsWith("0")) digits = digits.replace(/^0+/, "");
-  return digits.slice(0, 10);
+  if (digits.startsWith(country.dial) && digits.length > country.max) digits = digits.slice(country.dial.length);
+  return nationalNumber(digits, country.max);
 }
 
-function spokenNumber(national: string): string {
-  if (national.length !== 10) return `+${indiaDial}`;
-  return `+${indiaDial} ${national.slice(0, 5)} ${national.slice(5)}`;
+function spokenNumber(country: PhoneCountry, national: string): string {
+  return `+${country.dial} ${national}`.trim();
 }
 
 function CodeBoxes({ value, onChange }: { value: string; onChange: (next: string) => void }) {
@@ -127,6 +128,7 @@ function ProviderButton({
 
 export default function SignInScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const enterApp = useOnboarding((state) => state.enterApp);
@@ -134,6 +136,9 @@ export default function SignInScreen() {
   const interests = useOnboarding((state) => state.interests);
   const markSignedIn = useAuth((state) => state.markSignedIn);
   const [step, setStep] = useState<Step>("phone");
+  const [country, setCountry] = useState<PhoneCountry | null>(() => suggestPhoneCountry(getLocales()[0]?.regionCode));
+  const [picking, setPicking] = useState(false);
+  const [countryQuery, setCountryQuery] = useState("");
   const [national, setNational] = useState("");
   const [focused, setFocused] = useState(false);
   const [fieldNote, setFieldNote] = useState<string | null>(null);
@@ -144,8 +149,8 @@ export default function SignInScreen() {
   const phoneLock = useRef(false);
   const providerLock = useRef(false);
   const enter = useRef(new Animated.Value(reduced ? 1 : 0)).current;
-  const phoneE164 = `+${indiaDial}${national}`;
-  const phoneReady = national.length === 10;
+  const ready = country ? phoneReady(country, national) : false;
+  const phoneE164 = country ? `+${country.dial}${national}` : "";
 
   useEffect(() => {
     if (reduced) {
@@ -163,6 +168,18 @@ export default function SignInScreen() {
 
   async function finish() {
     markSignedIn();
+    let needsName = true;
+    try {
+      const account = await loadAccount();
+      queryClient.setQueryData(["account"], account);
+      needsName = !account.displayName;
+    } catch {
+      needsName = true;
+    }
+    if (needsName) {
+      router.replace({ pathname: "/name", params: { next: interests.length === 0 ? "interests" : "app" } });
+      return;
+    }
     if (interests.length === 0) {
       await setStage("interests");
       router.replace("/interests");
@@ -212,7 +229,7 @@ export default function SignInScreen() {
   }, [code, step, verify]);
 
   function requestCode() {
-    if (!phoneReady || start.isPending || phoneLock.current) return;
+    if (!ready || !country || start.isPending || phoneLock.current) return;
     phoneLock.current = true;
     setProviderNotice(null);
     setFieldNote(null);
@@ -301,28 +318,35 @@ export default function SignInScreen() {
             </Text>
             <Text allowFontScaling maxFontSizeMultiplier={1.3} style={styles.support}>
               {step === "code"
-                ? `Enter the 6-digit code for ${spokenNumber(national)}.`
+                ? `Enter the 6-digit code for ${country ? spokenNumber(country, national) : "your number"}.`
                 : "Sign in to continue to CITYDAY"}
             </Text>
 
             {step === "phone" ? (
               <View style={styles.form}>
                 <View style={[styles.phone, focused && styles.phoneFocused]}>
-                  <Text allowFontScaling style={styles.flag} importantForAccessibility="no">
-                    {countryFlag("IN")}
-                  </Text>
-                  <Text allowFontScaling style={styles.dial} importantForAccessibility="no">
-                    +{indiaDial}
-                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={country ? `${country.name}, plus ${country.dial}. Change country` : "Choose country"}
+                    onPress={() => setPicking(true)}
+                    style={styles.country}
+                  >
+                    <Text allowFontScaling style={styles.flag} importantForAccessibility="no">
+                      {country ? countryFlag(country.iso) : "🌐"}
+                    </Text>
+                    <Text allowFontScaling style={styles.dial} importantForAccessibility="no">
+                      {country ? `+${country.dial}` : "Country"}
+                    </Text>
+                  </Pressable>
                   <View style={styles.phoneRule} />
                   <TextInput
                     accessibilityLabel="Mobile phone number"
-                    accessibilityHint="India, country code plus 91. Enter 10 digits."
+                    accessibilityHint={country ? `${country.name}, country code plus ${country.dial}` : "Choose a country, then enter the mobile number."}
                     value={national}
                     onChangeText={(value) => {
-                      const next = indiaNational(value);
+                      const next = country ? digitsFor(country, value) : value.replace(/\D/g, "");
                       setNational(next);
-                      if (next.length === 0 || next.length === 10) setFieldNote(null);
+                      if (!country || next.length === 0 || phoneReady(country, next)) setFieldNote(null);
                       if (start.isError) start.reset();
                     }}
                     onFocus={() => {
@@ -331,7 +355,7 @@ export default function SignInScreen() {
                     }}
                     onBlur={() => {
                       setFocused(false);
-                      if (national.length > 0 && national.length < 10) setFieldNote("Enter a 10-digit mobile number.");
+                      if (country && national.length > 0 && !phoneReady(country, national)) setFieldNote(`Enter a mobile number for ${country.name}.`);
                     }}
                     placeholder="Mobile number"
                     placeholderTextColor={quiet}
@@ -348,19 +372,19 @@ export default function SignInScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Continue"
-                  accessibilityState={{ disabled: !phoneReady || start.isPending, busy: start.isPending }}
-                  disabled={!phoneReady || start.isPending}
+                  accessibilityState={{ disabled: !ready || start.isPending, busy: start.isPending }}
+                  disabled={!ready || start.isPending}
                   onPress={requestCode}
                   style={({ pressed }) => [
                     styles.continue,
-                    !phoneReady && styles.continueDisabled,
-                    pressed && phoneReady && !start.isPending && styles.pressed,
+                    !ready && styles.continueDisabled,
+                    pressed && ready && !start.isPending && styles.pressed,
                   ]}
                 >
                   <Text
                     allowFontScaling
                     maxFontSizeMultiplier={1.25}
-                    style={[styles.continueLabel, !phoneReady && styles.continueLabelDisabled, start.isPending && styles.hiddenLabel]}
+                    style={[styles.continueLabel, !ready && styles.continueLabelDisabled, start.isPending && styles.hiddenLabel]}
                   >
                     Continue
                   </Text>
@@ -432,6 +456,52 @@ export default function SignInScreen() {
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+      <Modal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
+        <View style={[styles.picker, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close countries" onPress={() => setPicking(false)} style={styles.back}>
+            <Ionicons name="chevron-back" size={26} color={ink} />
+          </Pressable>
+          <Text allowFontScaling accessibilityRole="header" style={styles.heading}>
+            Country
+          </Text>
+          <TextInput
+            accessibilityLabel="Search countries"
+            value={countryQuery}
+            onChangeText={setCountryQuery}
+            placeholder="Search"
+            placeholderTextColor={quiet}
+            style={styles.countrySearch}
+          />
+          <ScrollView keyboardShouldPersistTaps="handled">
+            {matchCountries(countryQuery).map((item) => (
+              <Pressable
+                key={item.iso}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.name}, plus ${item.dial}`}
+                accessibilityState={{ selected: country?.iso === item.iso }}
+                onPress={() => {
+                  setCountry(item);
+                  setNational((current) => digitsFor(item, current));
+                  setFieldNote(null);
+                  setPicking(false);
+                  setCountryQuery("");
+                }}
+                style={styles.countryRow}
+              >
+                <Text allowFontScaling style={styles.flag}>
+                  {countryFlag(item.iso)}
+                </Text>
+                <Text allowFontScaling style={styles.countryName}>
+                  {item.name}
+                </Text>
+                <Text allowFontScaling style={styles.dial}>
+                  +{item.dial}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -456,7 +526,22 @@ const styles = StyleSheet.create({
   },
   phoneFocused: { borderColor: ink },
   flag: { fontSize: 18, lineHeight: 22 },
+  country: { minHeight: 48, flexDirection: "row", alignItems: "center" },
   dial: { color: ink, fontSize: 16, lineHeight: 20, fontWeight: "600", marginLeft: 10, includeFontPadding: false },
+  picker: { flex: 1, backgroundColor: page, paddingHorizontal: 22 },
+  countrySearch: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: line,
+    backgroundColor: field,
+    paddingHorizontal: 16,
+    color: ink,
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  countryRow: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12 },
+  countryName: { flex: 1, color: ink, fontSize: 16 },
   phoneRule: { width: StyleSheet.hairlineWidth, height: 18, backgroundColor: "#E3DDD4", marginHorizontal: 12 },
   national: {
     flex: 1,

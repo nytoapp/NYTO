@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CityText } from "../city/chrome";
 import { city, citySpace } from "../city/theme";
+import { loadAccount } from "../auth/account";
 import { useSession } from "../auth/useSession";
 import { useDiscoveryLocation } from "../location/location-store";
 import { interestsById } from "../onboarding/interests";
@@ -15,9 +17,10 @@ export function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signedIn, signOut } = useSession();
+  const account = useQuery({ queryKey: ["account"], enabled: signedIn, queryFn: loadAccount });
   const interests = useOnboarding((state) => state.interests);
   const chosen = interestsById(interests);
-  const cityLabel = useDiscoveryLocation((state) => state.selected?.label) ?? "No city selected";
+  const cityLabel = useDiscoveryLocation((state) => state.selected?.label) ?? "Choose a city";
   const [notifications, setNotifications] = useState(true);
   const [note, setNote] = useState("");
 
@@ -30,8 +33,20 @@ export function ProfileScreen() {
             <Ionicons name="person" size={22} color={city.ink} />
           </View>
           <View style={styles.headerCopy}>
-            <CityText size="title">{signedIn ? "Your CITYDAY" : "Guest"}</CityText>
+            <CityText size="title" numberOfLines={1}>
+              {signedIn ? account.data?.displayName ?? "Add your name" : "Guest"}
+            </CityText>
+            {signedIn && account.data?.phoneE164 ? <CityText tone="muted">{account.data.phoneE164}</CityText> : null}
+            {signedIn && account.data?.email ? <CityText tone="muted">{account.data.email}</CityText> : null}
             <CityText tone="muted">{cityLabel}</CityText>
+            {signedIn && account.isError ? <CityText size="meta" tone="muted">Couldn't load your account.</CityText> : null}
+            {signedIn ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Edit name" onPress={() => router.push({ pathname: "/name", params: { next: "stay" } })}>
+                <CityText size="meta" tone="muted">
+                  {account.data?.displayName ? "Edit name" : "Add your name"}
+                </CityText>
+              </Pressable>
+            ) : null}
           </View>
         </View>
 
@@ -45,6 +60,7 @@ export function ProfileScreen() {
             ) : (
               chosen.map((item) => (
                 <View key={item.id} style={styles.chip}>
+                  <Image source={item.image} style={styles.chipImage} />
                   <CityText size="meta">{item.label}</CityText>
                 </View>
               ))
@@ -62,9 +78,9 @@ export function ProfileScreen() {
             PREFERENCES
           </CityText>
           <Row icon="notifications-outline" label="Notifications" value={notifications ? "On" : "Off"} onPress={() => setNotifications((value) => !value)} />
-          <Row icon="location-outline" label="Location" value={cityLabel} onPress={() => router.push("/")} />
+          <Row icon="location-outline" label="Location" value={cityLabel} onPress={() => router.push("/city")} />
           <Row icon="language-outline" label="Language" value="English" onPress={() => setNote("CITYDAY is in English for now.")} />
-          <Row icon="lock-closed-outline" label="Privacy" value="On this device" onPress={() => setNote("Saves and plans stay on this phone until a city database is connected.")} />
+          <Row icon="lock-closed-outline" label="Privacy" value="On this device" onPress={() => setNote("Saves and plans stay with your CITYDAY account.")} />
         </View>
 
         <View style={styles.section}>
@@ -97,10 +113,10 @@ export function ProfileScreen() {
 function Row({ icon, label, value, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; onPress: () => void }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.row}>
-      <Ionicons name={icon} size={18} color={city.ink} />
+      <Ionicons name={icon} size={20} color={city.ink} />
       <CityText style={styles.rowLabel}>{label}</CityText>
       {value ? (
-        <CityText size="meta" tone="muted">
+        <CityText size="meta" tone="muted" numberOfLines={1} style={styles.rowValue}>
           {value}
         </CityText>
       ) : null}
@@ -116,9 +132,11 @@ const styles = StyleSheet.create({
   headerCopy: { gap: 2 },
   section: { marginTop: 28, paddingHorizontal: citySpace.page, gap: 8 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  chip: { borderRadius: 999, backgroundColor: city.chip, paddingHorizontal: 12, paddingVertical: 8 },
+  chip: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 999, backgroundColor: city.chip, paddingLeft: 6, paddingRight: 12, paddingVertical: 6 },
+  chipImage: { width: 22, height: 22, borderRadius: 11 },
   edit: { alignSelf: "flex-start", minHeight: 36, justifyContent: "center" },
-  row: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: city.line },
+  row: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: city.line },
   rowLabel: { flex: 1 },
+  rowValue: { maxWidth: 140, textAlign: "right" },
   signOut: { minHeight: 52, justifyContent: "center" },
 });

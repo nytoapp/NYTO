@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import { Redirect, Stack, Tabs } from "expo-router";
 import { StyleSheet } from "react-native";
 import { useEffect } from "react";
+import { loadAccount } from "../../features/auth/account";
+import { useSession } from "../../features/auth/useSession";
 import { city, font } from "../../features/city/theme";
 import { revealApp } from "../../features/landing/reveal";
 import { useOnboarding } from "../../features/onboarding/store";
@@ -16,6 +19,8 @@ const icons = {
 
 export default function TabLayout() {
   const stage = useOnboarding((state) => state.stage);
+  const { signedIn } = useSession();
+  const account = useQuery({ queryKey: ["account"], enabled: signedIn && stage === "app", queryFn: loadAccount });
   useEffect(() => {
     if (stage === "app") revealApp();
   }, [stage]);
@@ -24,6 +29,9 @@ export default function TabLayout() {
   }
   if (stage === "interests") {
     return <Redirect href="/interests" />;
+  }
+  if (signedIn && account.isSuccess && !account.data.displayName) {
+    return <Redirect href="/name" />;
   }
   return (
     <>

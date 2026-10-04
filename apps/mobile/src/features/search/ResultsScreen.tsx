@@ -1,18 +1,24 @@
-import type { SearchResult } from "@atlas/contracts";
-import { Ionicons } from "@expo/vector-icons";
+import { buildResultFilters, removeFilterPhrase, type ResultFilter, type SearchResult } from "@atlas/contracts";
+import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CityText, EmptyState, GuideFab } from "../city/chrome";
-import { SubjectResultCard } from "../city/cards";
-import { intentChips } from "../city/format";
-import { city, citySpace } from "../city/theme";
+import { apiRequest } from "../../api/client";
+import { SignInSheet } from "../auth/SignInSheet";
+import { useSession } from "../auth/useSession";
+import { IconButton } from "../city/buttons";
+import { EmptyState, GuideFab } from "../city/chrome";
+import { CityChip } from "../city/chips";
+import { isCatalogId } from "../city/format";
+import { CompactPlaceCard, placeCardFromResult } from "../city/place-card";
+import { SearchBar } from "../city/search-bar";
+import { ListSkeleton } from "../city/skeleton";
+import { color, font, fontScaleCap, space } from "../city/theme";
 import { friendlyError } from "../../lib/errors";
+import { loadSaves, readSaveList } from "../saved/save-list";
 import { useSearch } from "./useSearch";
-
-const extras = ["tonight", "open now"] as const;
 
 export function ResultsScreen() {
   const router = useRouter();
@@ -20,102 +26,175 @@ export function ResultsScreen() {
   const params = useLocalSearchParams<{ q?: string }>();
   const initial = typeof params.q === "string" ? params.q : "";
   const [query, setQuery] = useState(initial);
+  const [draft, setDraft] = useState(initial);
+  const [phrases, setPhrases] = useState<string[]>([]);
   const [sort, setSort] = useState<"Recommended" | "Nearby">("Recommended");
+  const [signIn, setSignIn] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const search = useSearch();
+  const { signedIn, refresh } = useSession();
+  const saves = useQuery({
+    queryKey: ["saves"],
+    enabled: signedIn,
+    queryFn: loadSaves,
+  });
+
+  const apiQuery = [query, ...phrases].join(" ").replace(/\s+/g, " ").trim();
 
   useEffect(() => {
     setQuery(initial);
+    setDraft(initial);
+    setPhrases([]);
   }, [initial]);
 
   useEffect(() => {
-    if (query.trim()) search.mutate(query);
-  }, [query, search.mutate]);
+    if (apiQuery) search.mutate(apiQuery);
+  }, [apiQuery, search.mutate]);
 
+  const waiting = search.isPending || (Boolean(apiQuery) && search.status === "idle");
   const payload = search.data?.data;
-  const chips = intentChips(payload?.interpretation ?? null);
+  const filters = buildResultFilters({
+    query: apiQuery,
+    intent: payload?.interpretation ?? null,
+    sort: sort === "Nearby" ? "nearby" : "recommended",
+  });
   const results = useMemo(() => {
-    const list = payload?.results ?? [];
+    const list = Array.isArray(payload?.results) ? payload.results : [];
     if (sort === "Nearby") {
       return [...list].sort((a, b) => (a.distanceMeters ?? Number.MAX_SAFE_INTEGER) - (b.distanceMeters ?? Number.MAX_SAFE_INTEGER));
     }
     return list;
   }, [payload?.results, sort]);
+  const savedIds = new Set(readSaveList(saves.data).map((item) => item.subjectId));
+  const notices = Array.isArray(payload?.notices) ? payload.notices : [];
 
-  function dropChip(phrase: string) {
-    const next = query.replace(new RegExp(phrase, "ig"), " ").replace(/\s+/g, " ").trim();
-    setQuery(next);
+  function applyFilter(filter: ResultFilter) {
+    if (filter.key === "recommended" || filter.key === "nearby") {
+      setSort(filter.key === "nearby" ? "Nearby" : "Recommended");
+      return;
+    }
+    if (!filter.phrase) return;
+    const phrase = filter.phrase;
+    if (filter.selected) {
+      setPhrases((current) => current.filter((item) => item.toLowerCase() !== phrase.toLowerCase()));
+      const next = removeFilterPhrase(query, phrase);
+      setQuery(next);
+      setDraft(next);
+      return;
+    }
+    setPhrases((current) => (current.some((item) => item.toLowerCase() === phrase.toLowerCase()) ? current : [...current, phrase]));
+  }
+
+  async function saveSubject(id: string) {
+    if (!isCatalogId(id)) return;
+    if (!signedIn) {
+      setPendingId(id);
+      setSignIn(true);
+      return;
+    }
+    setSaveError(null);
+    const response = savedIds.has(id)
+      ? await apiRequest<{ removed: boolean }>(`/api/v1/saves/${id}`, { method: "DELETE" })
+      : await apiRequest<{ id: string }>("/api/v1/saves", { method: "POST", body: JSON.stringify({ subjectId: id }) });
+    if (response.error) {
+      setSaveError(response.error.message);
+      return;
+    }
+    void saves.refetch();
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={{ flex: 1, backgroundColor: color.background }}>
       <StatusBar style="dark" />
-      <View style={{ paddingTop: insets.top + 8, paddingHorizontal: citySpace.page, gap: 12 }}>
-        <View style={styles.top}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
-            <Ionicons name="chevron-back" size={24} color={city.ink} />
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Edit search" onPress={() => router.push("/search")} style={styles.query}>
-            <CityText numberOfLines={1}>{query || "Search"}</CityText>
-          </Pressable>
+      <View style={{ paddingTop: insets.top + space[8], paddingHorizontal: space.page, gap: space[12] }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[4] }}>
+          <IconButton label="Back" icon="chevron-back" onPress={() => router.back()} />
+          <View style={{ flex: 1 }}>
+            <SearchBar
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Search"
+              accessibilityLabel="Edit search"
+              onSubmit={() => {
+                const next = draft.trim();
+                setDraft(next);
+                setQuery(next);
+              }}
+            />
+          </View>
         </View>
         {payload?.locationLabel ? (
-          <CityText size="meta" tone="muted">
+          <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.label, { color: color.secondaryText }]}>
             {payload.locationLabel}
-          </CityText>
+          </Text>
         ) : null}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-          {chips.map((chip) => (
-            <Pressable key={chip.id} accessibilityRole="button" accessibilityLabel={`Remove ${chip.label}`} onPress={() => dropChip(chip.phrase)} style={styles.filterOn}>
-              <CityText size="meta" tone="onDark">
-                {chip.label}
-              </CityText>
-            </Pressable>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[8] }}>
+          {filters.map((filter) => (
+            <CityChip
+              key={filter.key}
+              label={filter.label.replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())}
+              variant={filter.group === "ranking" || filter.group === "distance" ? "category" : "filter"}
+              selected={filter.selected}
+              onPress={() => applyFilter(filter)}
+            />
           ))}
-          {extras.map((extra) => {
-            const on = query.toLowerCase().includes(extra);
-            return (
-              <Pressable key={extra} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => setQuery(on ? query.replace(new RegExp(extra, "ig"), "").replace(/\s+/g, " ").trim() : `${query} ${extra}`.trim())} style={[styles.filter, on && styles.filterOn]}>
-                <CityText size="meta" tone={on ? "onDark" : "ink"}>
-                  {extra === "tonight" ? "Tonight" : "Open now"}
-                </CityText>
-              </Pressable>
-            );
-          })}
-          {(["Recommended", "Nearby"] as const).map((item) => (
-            <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: sort === item }} onPress={() => setSort(item)} style={[styles.filter, sort === item && styles.filterOn]}>
-              <CityText size="meta" tone={sort === item ? "onDark" : "ink"}>
-                {item}
-              </CityText>
-            </Pressable>
-          ))}
-        </ScrollView>
+        </View>
       </View>
-      <ScrollView contentContainerStyle={{ padding: citySpace.page, gap: 12, paddingBottom: insets.bottom + 96 }}>
-        {search.isPending ? <View style={styles.skeleton} /> : null}
-        {search.isError ? <EmptyState title="Search didn't finish" body={friendlyError(search.error)} action="Try again" onAction={() => search.mutate(query)} /> : null}
-        {payload?.notices.map((notice) => (
-          <CityText key={notice.code} size="meta" tone="muted">
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space.page, gap: space[12], paddingBottom: insets.bottom + 150 }}>
+        {waiting ? <ListSkeleton /> : null}
+        {search.isError ? <EmptyState title="Search didn't finish" body={friendlyError(search.error)} action="Try again" onAction={() => search.mutate(apiQuery)} /> : null}
+        {saveError ? (
+          <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.error }]}>
+            {saveError}
+          </Text>
+        ) : null}
+        {notices.map((notice) => (
+          <Text key={notice.code} allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText }]}>
             {notice.message}
-          </CityText>
+          </Text>
         ))}
-        {!search.isPending && !search.isError && results.length === 0 ? (
-          <EmptyState title="Nothing matched" body="Try a wider idea, or take a filter off." action="Edit search" onAction={() => router.push("/search")} />
-        ) : (
-          results.map((item: SearchResult) => <SubjectResultCard key={item.id} item={item} />)
-        )}
+        {!waiting && !search.isError && apiQuery.length === 0 ? (
+          <EmptyState title="Search the city" body="Try a place, a meal, or a kind of evening." action="Edit search" onAction={() => router.push("/search")} />
+        ) : null}
+        {!waiting && !search.isError && apiQuery.length > 0 && results.length === 0 && !notices.some((notice) => notice.code === "GUIDE_HOLD" || notice.code === "HOURS_UNKNOWN") ? (
+          <EmptyState
+            title="Nothing matched"
+            body={`No published places matched “${query.trim() || apiQuery}”. Change the words, or take a filter off.`}
+            action="Edit search"
+            onAction={() => router.push("/search")}
+          />
+        ) : null}
+        {!waiting && !search.isError
+          ? results.map((item: SearchResult) => (
+              <CompactPlaceCard
+                key={item.id}
+                place={placeCardFromResult(item)}
+                saved={savedIds.has(item.id)}
+                onSave={isCatalogId(item.id) ? () => void saveSubject(item.id) : undefined}
+                onPress={isCatalogId(item.id) ? () => router.push(`/subject/${item.id}`) : undefined}
+              />
+            ))
+          : null}
       </ScrollView>
       <GuideFab from="Results" />
+      <SignInSheet
+        visible={signIn}
+        onClose={() => setSignIn(false)}
+        onSignedIn={() => {
+          const subjectId = pendingId;
+          void refresh().then(async () => {
+            if (!subjectId || !isCatalogId(subjectId)) return;
+            setSaveError(null);
+            const response = await apiRequest<{ id: string }>("/api/v1/saves", { method: "POST", body: JSON.stringify({ subjectId }) });
+            if (response.error) {
+              setSaveError(response.error.message);
+              return;
+            }
+            void saves.refetch();
+          });
+        }}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: city.page },
-  top: { flexDirection: "row", alignItems: "center", gap: 8 },
-  back: { width: 40, height: 44, justifyContent: "center" },
-  query: { flex: 1, minHeight: 44, justifyContent: "center", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: city.line },
-  filters: { gap: 8 },
-  filter: { borderRadius: 999, backgroundColor: city.chip, paddingHorizontal: 14, paddingVertical: 8 },
-  filterOn: { borderRadius: 999, backgroundColor: city.ink, paddingHorizontal: 14, paddingVertical: 8 },
-  skeleton: { height: 92, borderRadius: 16, backgroundColor: city.photo },
-});

@@ -1,51 +1,60 @@
-import type { SubjectDetail } from "@atlas/contracts";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { apiRequest } from "../../api/client";
 import { CityText, EmptyState } from "../city/chrome";
 import { SubjectResultCard } from "../city/cards";
+import { ListSkeleton } from "../city/skeleton";
 import { city, citySpace } from "../city/theme";
 import { useSession } from "../auth/useSession";
+import { useDiscoveryLocation } from "../location/location-store";
+import { loadSubject } from "../subject/load-subject";
+import { loadSaves, readSaveList } from "./save-list";
 
 const tabs = ["Places", "Events", "Activities", "Plans"] as const;
 
 export function SavedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signedIn } = useSession();
+  const { signedIn, restoring } = useSession();
+  const selected = useDiscoveryLocation((state) => state.selected);
   const [tab, setTab] = useState<(typeof tabs)[number]>("Places");
   const saves = useQuery({
     queryKey: ["saves"],
     enabled: signedIn,
-    queryFn: async () => {
-      const response = await apiRequest<{ items: { id: string; subjectId: string }[] }>("/api/v1/saves");
-      if (response.error || !response.data) {
-        throw new Error(response.error?.message ?? "Saves could not be loaded.");
-      }
-      return response.data.items;
-    },
+    queryFn: loadSaves,
   });
+  const savedItems = readSaveList(saves.data);
   const details = useQueries({
-    queries: (saves.data ?? []).map((item) => ({
+    queries: savedItems.map((item) => ({
       queryKey: ["subject", item.subjectId],
-      queryFn: async () => {
-        const response = await apiRequest<SubjectDetail>(`/api/v1/subjects/${item.subjectId}`);
-        if (response.error || !response.data) return null;
-        return response.data;
-      },
+      queryFn: () => loadSubject(item.subjectId),
     })),
   });
-  const subjects = details.flatMap((query) => (query.data ? [query.data] : []));
+  const detailList = Array.isArray(details) ? details : [];
+  const detailsPending = savedItems.length > 0 && detailList.some((query) => query.isPending || query.isLoading);
+  const subjects = detailList.flatMap((query) => (query.data ? [query.data] : []));
   const visible = subjects.filter((subject) => {
     if (tab === "Events") return subject.kind === "event" || subject.kind === "media";
     if (tab === "Activities") return subject.kind === "activity" || subject.kind === "experience";
     if (tab === "Plans") return false;
     return subject.kind === "place" || subject.kind === "accommodation";
   });
+  const exploreLabel = selected ? `Explore ${selected.label}` : "Choose a city";
+  const openExplore = () => router.push(selected ? "/explore" : "/city");
+  const loading = restoring || (signedIn && (saves.isLoading || (!saves.isSuccess && !saves.isError) || detailsPending));
+  const placesMissing = signedIn && saves.isSuccess && savedItems.length > 0 && subjects.length === 0 && !detailsPending;
+  const failed = signedIn && (saves.isError || placesMissing);
+  const empty = signedIn && saves.isSuccess && savedItems.length === 0 && tab !== "Plans" && !loading && !failed;
+  const plansTab = signedIn && tab === "Plans" && !loading && !failed;
+  const filteredEmpty = signedIn && tab !== "Plans" && saves.isSuccess && savedItems.length > 0 && !loading && !failed && visible.length === 0;
+
+  function retry() {
+    void saves.refetch();
+    for (const query of detailList) void query.refetch();
+  }
 
   return (
     <View style={styles.screen}>
@@ -67,11 +76,15 @@ export function SavedScreen() {
           })}
         </ScrollView>
         <View style={styles.list}>
-          {!signedIn ? <EmptyState title="Sign in to keep saves" body="Places you save stay with your account." action="Log in" onAction={() => router.push("/sign-in")} /> : null}
-          {signedIn && saves.isError ? <EmptyState title="Saves didn't load" body="Give it another try." action="Try again" onAction={() => void saves.refetch()} /> : null}
-          {signedIn && tab === "Plans" ? <EmptyState title="Plans live with your trips" body="Open Plans to see evenings you have saved." action="Plans" onAction={() => router.push("/(tabs)/trips")} /> : null}
-          {signedIn && tab !== "Plans" && !saves.isLoading && visible.length === 0 ? <EmptyState title="Nothing saved yet" body="Save places and experiences you want to come back to." action="Explore" onAction={() => router.push("/explore")} /> : null}
-          {tab !== "Plans"
+          {!restoring && !signedIn ? <EmptyState title="Your saves live here" body="Sign in to keep places you want to come back to." action="Sign in" onAction={() => router.push("/sign-in")} /> : null}
+          {loading ? <ListSkeleton /> : null}
+          {failed && !loading ? (
+            <EmptyState title="Couldn't load your saves" body="We couldn't retrieve your saved places right now." action="Try again" onAction={retry} />
+          ) : null}
+          {plansTab ? <EmptyState title="Plans live with your trips" body="Open Plans to see evenings you have saved." action="Plans" onAction={() => router.push("/(tabs)/trips")} /> : null}
+          {empty ? <EmptyState title="Nothing saved yet" body="Save places and experiences you want to come back to." action={exploreLabel} onAction={openExplore} /> : null}
+          {filteredEmpty ? <CityText tone="muted">Nothing in this list yet.</CityText> : null}
+          {!loading && !failed && tab !== "Plans"
             ? visible.map((subject) => (
                 <SubjectResultCard
                   key={subject.id}
@@ -81,7 +94,7 @@ export function SavedScreen() {
                     provider: null,
                     state: "ok",
                     distanceMeters: null,
-                    destination: subject.booking.destinationId && subject.booking.label ? { id: subject.booking.destinationId, label: subject.booking.label } : null,
+                    destination: subject.booking?.destinationId && subject.booking.label ? { id: subject.booking.destinationId, label: subject.booking.label } : null,
                     reasons: [],
                   }}
                 />

@@ -42,7 +42,11 @@ export const phoneCountries: PhoneCountry[] = [
   { iso: "BR", name: "Brazil", dial: "55", min: 10, max: 11 },
 ];
 
-export const defaultPhoneCountry = phoneCountries[0];
+export function suggestPhoneCountry(regionCode: string | null | undefined): PhoneCountry | null {
+  const iso = regionCode?.trim().toUpperCase();
+  if (!iso) return null;
+  return phoneCountries.find((country) => country.iso === iso) ?? null;
+}
 
 export function countryFlag(iso: string): string {
   const code = iso.toUpperCase();

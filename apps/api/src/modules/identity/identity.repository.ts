@@ -227,6 +227,32 @@ export class IdentityRepository {
     return { userId, sessionId, roles: roles.rows.map((item: { role: string }) => item.role) };
   }
 
+  async accountFor(userId: string): Promise<{ displayName: string | null; phoneE164: string | null; email: string | null }> {
+    const result = await this.pool.query(
+      `select p.display_name,
+              (select phone_e164 from auth_identities where user_id = p.user_id and phone_e164 is not null order by created_at asc limit 1) as phone_e164,
+              (select email from auth_identities where user_id = p.user_id and email is not null order by created_at asc limit 1) as email
+       from user_profiles p
+       where p.user_id = $1`,
+      [userId],
+    );
+    const row = result.rows[0] as { display_name: string | null; phone_e164: string | null; email: string | null } | undefined;
+    const displayName = row?.display_name?.trim() ?? "";
+    return {
+      displayName: displayName.length > 0 ? displayName : null,
+      phoneE164: row?.phone_e164 ? String(row.phone_e164) : null,
+      email: row?.email ? String(row.email) : null,
+    };
+  }
+
+  async setDisplayName(userId: string, displayName: string): Promise<boolean> {
+    const updated = await this.pool.query(
+      "update user_profiles set display_name = $2, updated_at = clock_timestamp() where user_id = $1",
+      [userId, displayName],
+    );
+    return Boolean(updated.rowCount);
+  }
+
   async audit(action: string, requestId: string, actorUserId: string | null, targetId: string | null): Promise<void> {
     await this.pool.query(
       `insert into audit_events (action, target_type, target_id, request_id, actor_user_id, metadata)

@@ -1,21 +1,32 @@
 import { useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { DestinationResolveResponse, SubjectDetail, TripDetail } from "@atlas/contracts";
+import type { DestinationResolveResponse, TripDetail } from "@atlas/contracts";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../../api/client";
-import { CityText, DarkButton, EmptyState, Photo, QuietButton } from "../city/chrome";
-import { formatPrice, kindLabel } from "../city/format";
-import { city, citySpace } from "../city/theme";
-import { friendlyError } from "../../lib/errors";
+import { loadSubject } from "./load-subject";
 import { SignInSheet } from "../auth/SignInSheet";
 import { useSession } from "../auth/useSession";
+import { GhostButton, IconButton, PrimaryButton } from "../city/buttons";
+import { EmptyState } from "../city/chrome";
+import { formatPrice, kindLabel } from "../city/format";
+import { CategoryCover } from "../city/place-card";
+import { CityImage } from "../city/image";
+import { Skeleton, TextSkeleton } from "../city/skeleton";
+import { color, font, fontScaleCap, radius, space } from "../city/theme";
+import { friendlyError } from "../../lib/errors";
+import { loadSaves, readSaveList } from "../saved/save-list";
+import { loadTrips, readTripList } from "../trips/trip-list";
 
 const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export function SubjectScreen({ id }: { id: string }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const heroHeight = Math.round(Math.min(width * 0.92, 360));
   const { signedIn, refresh } = useSession();
   const [signIn, setSignIn] = useState(false);
   const [pendingSave, setPendingSave] = useState(false);
@@ -23,31 +34,17 @@ export function SubjectScreen({ id }: { id: string }) {
   const query = useQuery({
     queryKey: ["subject", id],
     enabled: id.length > 0,
-    queryFn: async () => {
-      const response = await apiRequest<SubjectDetail>(`/api/v1/subjects/${id}`);
-      if (response.error || !response.data) {
-        throw new Error(response.error?.message ?? "This item could not be loaded.");
-      }
-      return response.data;
-    },
+    queryFn: () => loadSubject(id),
   });
   const saved = useQuery({
     queryKey: ["saves"],
     enabled: signedIn,
-    queryFn: async () => {
-      const response = await apiRequest<{ items: { id: string; subjectId: string }[] }>("/api/v1/saves");
-      if (response.error || !response.data) return { items: [] as { id: string; subjectId: string }[] };
-      return response.data;
-    },
+    queryFn: loadSaves,
   });
   const trips = useQuery({
     queryKey: ["trips"],
     enabled: signedIn,
-    queryFn: async () => {
-      const response = await apiRequest<{ items: { id: string; title: string }[] }>("/api/v1/trips");
-      if (response.error || !response.data) return { items: [] as { id: string; title: string }[] };
-      return response.data;
-    },
+    queryFn: loadTrips,
   });
   const save = useMutation({
     mutationFn: async () => {
@@ -82,7 +79,7 @@ export function SubjectScreen({ id }: { id: string }) {
     onError: (error) => setActionError(friendlyError(error, "That link is not available.")),
   });
 
-  const alreadySaved = saved.data?.items.some((item) => item.subjectId === id) ?? false;
+  const alreadySaved = readSaveList(saved.data).some((item) => item.subjectId === id);
 
   function onSave() {
     if (!signedIn) {
@@ -90,79 +87,145 @@ export function SubjectScreen({ id }: { id: string }) {
       setSignIn(true);
       return;
     }
+    if (alreadySaved) {
+      void apiRequest(`/api/v1/saves/${id}`, { method: "DELETE" }).then((response) => {
+        if (response.error) {
+          setActionError(response.error.message);
+          return;
+        }
+        void saved.refetch();
+      });
+      return;
+    }
     save.mutate();
   }
 
   if (query.isLoading) {
     return (
-      <View style={styles.screen}>
-        <View style={styles.skeleton} />
+      <View style={{ flex: 1, backgroundColor: color.background }}>
+        <Skeleton height={120} round={0} />
+        <View style={{ position: "absolute", top: insets.top + space[8], left: space[16] }}>
+          <RoundControl label="Back" icon="chevron-back" onPress={() => router.back()} />
+        </View>
+        <View style={{ padding: space.page, gap: space[12] }}>
+          <TextSkeleton width="40%" />
+          <TextSkeleton width="78%" />
+          <TextSkeleton width="56%" />
+          <Skeleton height={14} />
+          <Skeleton height={48} round={radius.pill} />
+        </View>
       </View>
     );
   }
   if (query.isError || !query.data) {
     return (
-      <View style={styles.screen}>
+      <View style={{ flex: 1, backgroundColor: color.background, paddingTop: insets.top, paddingHorizontal: space.page }}>
+        <IconButton label="Back" icon="chevron-back" onPress={() => router.back()} />
         <EmptyState title="This didn't load" body={friendlyError(query.error, "Give it another try.")} action="Try again" onAction={() => void query.refetch()} />
       </View>
     );
   }
 
   const place = query.data;
-  const hero = place.images[0]?.url ?? "";
   const price = formatPrice(place.price);
-  const action = place.booking.destinationId && place.booking.capability !== "unavailable" ? place.booking.label : null;
-  const facts = [place.rating !== null ? place.rating.toFixed(1) : null, place.reviewCount !== null ? `${place.reviewCount} notes` : null, price].filter(Boolean).join(" · ");
+  const images = Array.isArray(place.images) ? place.images : [];
+  const hours = Array.isArray(place.hours) ? place.hours : [];
+  const attribution = Array.isArray(place.attribution) ? place.attribution : [];
+  const firstPlan = readTripList(trips.data)[0];
+  const external = place.booking?.destinationId && place.booking.capability !== "unavailable" ? place.booking : null;
+  const externalLabel = external?.capability === "website" || !external?.label ? "Open website" : external.label;
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1, backgroundColor: color.background }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + space[40] }} showsVerticalScrollIndicator={false}>
         <View>
-          <Photo uri={hero} style={styles.hero} />
-          <View style={styles.heroBar}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.round}>
-              <Ionicons name="chevron-back" size={22} color={city.ink} />
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={alreadySaved ? "Saved" : "Save"} onPress={onSave} style={styles.round}>
-              <Ionicons name={alreadySaved ? "heart" : "heart-outline"} size={18} color={alreadySaved ? city.danger : city.ink} />
-            </Pressable>
+          {images.length > 0 ? (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+              {images.map((image) => (
+                <CityImage key={`${image.position}-${image.url}`} uri={image.url} alt={image.alt ?? place.title} style={{ width, height: heroHeight }} />
+              ))}
+            </ScrollView>
+          ) : (
+            <CategoryCover label={place.category ?? kindLabel(place.kind)} style={{ width, height: heroHeight }} />
+          )}
+          <View style={{ position: "absolute", top: insets.top + space[8], left: space[16], right: space[16], flexDirection: "row", justifyContent: "space-between" }}>
+            <RoundControl label="Back" icon="chevron-back" onPress={() => router.back()} />
+            <RoundControl label={alreadySaved ? "Saved" : "Save"} icon={alreadySaved ? "heart" : "heart-outline"} tint={alreadySaved ? color.error : color.primaryText} onPress={onSave} />
           </View>
+          {place.category || place.kind ? (
+            <View style={{ position: "absolute", left: space[16], bottom: space[16], paddingHorizontal: space[12], paddingVertical: space[8], borderRadius: radius.pill, backgroundColor: "rgba(255,252,248,0.92)" }}>
+              <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, { color: color.primaryText }]}>
+                {(place.category ?? kindLabel(place.kind)).toUpperCase()}
+              </Text>
+            </View>
+          ) : null}
         </View>
-        <View style={styles.body}>
-          <CityText size="caption" tone="quiet">
-            {[kindLabel(place.kind), place.category, place.locality].filter(Boolean).join(" · ").toUpperCase()}
-          </CityText>
-          <CityText size="display">{place.title}</CityText>
-          {facts ? <CityText tone="muted">{facts}</CityText> : null}
-          {place.summary ? <CityText>{place.summary}</CityText> : null}
-          {place.hours.length > 0 ? (
-            <View style={styles.block}>
-              <CityText size="section">Hours</CityText>
-              {place.hours.map((hour) => (
-                <CityText key={`${hour.weekday}-${hour.opens}`} size="meta" tone="muted">
+        <View style={{ padding: space.page, gap: space[12] }}>
+          <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.display, { color: color.primaryText }]}>
+            {place.title}
+          </Text>
+          {place.locality ? (
+            <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, { color: color.secondaryText }]}>
+              {place.locality}
+              {place.countryCode ? ` · ${place.countryCode}` : ""}
+            </Text>
+          ) : null}
+          {place.rating !== null || place.reviewCount !== null || price ? (
+            <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodyMedium, { color: color.primaryText }]}>
+              {[place.rating !== null ? place.rating.toFixed(1) : null, place.reviewCount !== null ? `${place.reviewCount} notes` : null, price]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+          ) : null}
+          {place.summary ? (
+            <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, { color: color.primaryText }]}>
+              {place.summary}
+            </Text>
+          ) : null}
+          {hours.length > 0 ? (
+            <View style={{ gap: space[4], marginTop: space[8] }}>
+              <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.h3, { color: color.primaryText }]}>
+                Hours
+              </Text>
+              {hours.map((hour) => (
+                <Text key={`${hour.weekday}-${hour.opens}`} allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText }]}>
                   {weekdays[hour.weekday] ?? "Day"} · {hour.opens}–{hour.closes}
-                </CityText>
+                </Text>
               ))}
             </View>
           ) : null}
           {place.startsAt ? (
-            <CityText size="meta" tone="muted">
+            <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText }]}>
               {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: place.timezone ?? undefined }).format(new Date(place.startsAt))}
-            </CityText>
+            </Text>
           ) : null}
-          {place.attribution[0] ? (
-            <CityText size="caption" tone="quiet">
-              {place.attribution[0].text}
-            </CityText>
+          {place.phone ? (
+            <Pressable accessibilityRole="link" accessibilityLabel={`Call ${place.phone}`} onPress={() => void Linking.openURL(`tel:${place.phone}`)}>
+              <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodyMedium, { color: color.primaryText }]}>
+                {place.phone}
+              </Text>
+            </Pressable>
           ) : null}
-          {action && place.booking.destinationId ? <DarkButton label={openDestination.isPending ? "Opening" : action} onPress={() => openDestination.mutate(place.booking.destinationId as string)} /> : null}
-          {signedIn && trips.data && trips.data.items[0] ? (
-            <QuietButton label={`Add to ${trips.data.items[0].title}`} onPress={() => addToPlan.mutate(trips.data.items[0].id)} />
+          {attribution[0] ? (
+            <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, { color: color.mutedText }]}>
+              {attribution[0].text}
+            </Text>
           ) : null}
-          {actionError ? <CityText tone="muted">{actionError}</CityText> : null}
-          {save.isError ? <CityText tone="muted">{friendlyError(save.error, "Couldn't save this.")}</CityText> : null}
-          {addToPlan.isError ? <CityText tone="muted">{friendlyError(addToPlan.error, "Couldn't add this to the plan.")}</CityText> : null}
-          {addToPlan.isSuccess ? <CityText tone="muted">Added to the plan.</CityText> : null}
+          {external?.destinationId ? (
+            <View style={{ gap: space[8], marginTop: space[8] }}>
+              <PrimaryButton label={openDestination.isPending ? "Opening" : externalLabel} onPress={() => openDestination.mutate(external.destinationId as string)} />
+              <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText }]}>
+                This opens outside CITYDAY. Nothing is booked inside the app.
+              </Text>
+            </View>
+          ) : null}
+          {signedIn && firstPlan ? (
+            <GhostButton label={addToPlan.isPending ? "Adding" : `Add to ${firstPlan.title}`} onPress={() => addToPlan.mutate(firstPlan.id)} />
+          ) : null}
+          {actionError ? <Text style={[font.bodySmall, { color: color.error }]}>{actionError}</Text> : null}
+          {save.isError ? <Text style={[font.bodySmall, { color: color.error }]}>{friendlyError(save.error, "Couldn't save this.")}</Text> : null}
+          {addToPlan.isError ? <Text style={[font.bodySmall, { color: color.error }]}>{friendlyError(addToPlan.error, "Couldn't add this to the plan.")}</Text> : null}
+          {addToPlan.isSuccess ? <Text style={[font.bodySmall, { color: color.secondaryText }]}>Added to the plan.</Text> : null}
         </View>
       </ScrollView>
       <SignInSheet
@@ -178,12 +241,15 @@ export function SubjectScreen({ id }: { id: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: city.page },
-  hero: { width: "100%", height: 360 },
-  heroBar: { position: "absolute", top: 52, left: 16, right: 16, flexDirection: "row", justifyContent: "space-between" },
-  round: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(246,243,238,0.94)", alignItems: "center", justifyContent: "center" },
-  body: { padding: citySpace.page, gap: 10 },
-  block: { gap: 4, marginTop: 8 },
-  skeleton: { flex: 1, margin: citySpace.page, borderRadius: 16, backgroundColor: city.photo },
-});
+function RoundControl({ label, icon, onPress, tint = color.primaryText }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; tint?: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={{ width: 48, height: 48, borderRadius: radius.pill, backgroundColor: color.surface, alignItems: "center", justifyContent: "center" }}
+    >
+      <Ionicons name={icon} size={22} color={tint} />
+    </Pressable>
+  );
+}

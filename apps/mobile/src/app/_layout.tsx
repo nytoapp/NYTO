@@ -10,6 +10,7 @@ import { ThemeProvider } from "../components/theme/ThemeProvider";
 import { queryClient } from "../lib/query-client";
 import { useAuth } from "../features/auth/session";
 import { revealApp } from "../features/landing/reveal";
+import { useDiscoveryLocation } from "../features/location/location-store";
 import { useOnboarding } from "../features/onboarding/store";
 
 void SplashScreen.preventAutoHideAsync();
@@ -18,9 +19,11 @@ function Startup() {
   const status = useAuth((state) => state.status);
   const restore = useAuth((state) => state.restore);
   const hydrated = useOnboarding((state) => state.hydrated);
+  const hydrateLocation = useDiscoveryLocation((state) => state.hydrate);
   useEffect(() => {
     void restore();
-  }, [restore]);
+    void hydrateLocation();
+  }, [hydrateLocation, restore]);
   useEffect(() => {
     if (status === "restoring" || !hydrated) return;
     const timer = setTimeout(revealApp, 1600);

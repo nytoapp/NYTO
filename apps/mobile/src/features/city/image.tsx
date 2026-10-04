@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Image, StyleSheet, View, type ImageStyle, type StyleProp, type ViewStyle } from "react-native";
-import { color } from "./theme";
+import { Image, StyleSheet, Text, View, type ImageStyle, type StyleProp, type ViewStyle } from "react-native";
+import { color, font, fontScaleCap, radius, space } from "./theme";
 
 function httpsUri(uri: string | null | undefined): string | null {
   if (!uri) return null;
@@ -53,9 +53,35 @@ export function CityImage({
   );
 }
 
+/** Compact stand-in when a place has no photo. Not a stand-in image. */
+export function MissingMedia({ label, style }: { label: string; style?: StyleProp<ViewStyle> }) {
+  const word = label.trim() || "Place";
+  return (
+    <View accessibilityLabel={`${word}. No photo`} style={[styles.missing, style]}>
+      <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} numberOfLines={3} style={styles.missingLabel}>
+        {word}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   frame: {
     backgroundColor: color.imagePlaceholder,
     overflow: "hidden",
+  },
+  missing: {
+    backgroundColor: color.accentSoft,
+    borderRadius: radius.medium,
+    paddingHorizontal: space[12],
+    paddingVertical: space[12],
+    justifyContent: "flex-end",
+    minHeight: 72,
+  },
+  missingLabel: {
+    ...font.caption,
+    color: color.secondaryText,
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
   },
 });

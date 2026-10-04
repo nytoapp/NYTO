@@ -13,6 +13,7 @@ type AuthState = {
   restore: () => Promise<void>;
   refresh: () => Promise<void>;
   markSignedIn: () => void;
+  expire: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -56,6 +57,10 @@ export const useAuth = create<AuthState>((set) => ({
     set({ status: token ? "signedIn" : "signedOut" });
   },
   markSignedIn: () => set({ status: "signedIn" }),
+  expire: async () => {
+    await writeAccessToken(null);
+    set({ status: "signedOut" });
+  },
   signOut: async () => {
     try {
       await apiRequest("/api/v1/auth/logout", { method: "POST" });

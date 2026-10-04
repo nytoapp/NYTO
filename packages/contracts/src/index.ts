@@ -9,6 +9,8 @@ export {
   type ApiWarning,
   type ErrorCode,
 } from "./errors";
+export { buildResultFilters, removeFilterPhrase, type ResultFilter, type ResultFilterGroup } from "./result-filters";
+export { classifyGuideRequest, guideIntentKinds, type GuideIntent, type GuideIntentKind } from "./guide-intent";
 export {
   attributionSchema,
   budgetConstraintSchema,

@@ -1,6 +1,6 @@
-import { toMinorUnits } from "@atlas/config";
+import { limits, toMinorUnits } from "@atlas/config";
 import { parsedIntentSchema, type ParsedIntent } from "@atlas/contracts";
-import { classifyQuery, normalizeQuery } from "./normalize";
+import { normalizeQuery } from "./normalize";
 
 const CUISINES = ["italian", "french", "japanese", "indian", "chinese", "mexican", "thai", "korean", "spanish", "greek"];
 
@@ -64,16 +64,19 @@ export class LlmIntentInterpreter implements IntentInterpreter {
 }
 
 function buildCandidate(normalized: string, locale: string): ParsedIntent {
-  const mode = classifyQuery(normalized);
   const discover = /\bwhat can i\b/i.test(normalized);
   const kinds: ParsedIntent["kinds"] = [];
   const categorySlugs: string[] = [];
   const tagSlugs: string[] = [];
   const preferences: string[] = [];
 
-  if (/\b(restaurants?|cafes?)\b/i.test(normalized)) {
+  if (/\b(restaurants?|food)\b/i.test(normalized)) {
     kinds.push("place");
-    categorySlugs.push(/\bcafes?\b/i.test(normalized) ? "cafe" : "restaurant");
+    categorySlugs.push("restaurant");
+  }
+  if (/\b(cafes?|coffee)\b/i.test(normalized)) {
+    kinds.push("place");
+    categorySlugs.push("cafe");
   }
   if (/\b(hotels?|stays?)\b/i.test(normalized)) {
     kinds.push("accommodation");
@@ -92,6 +95,37 @@ function buildCandidate(normalized: string, locale: string): ParsedIntent {
   }
   if (/\b(class|experience|tasting)\b/i.test(normalized)) {
     kinds.push("experience");
+  }
+  if (/\b(nightlife|bars?)\b/i.test(normalized)) {
+    kinds.push("place");
+    categorySlugs.push("nightlife");
+  }
+  if (/\bmuseums?\b/i.test(normalized)) {
+    kinds.push("place");
+    categorySlugs.push("museum");
+  }
+  if (/\b(culture|cultural)\b/i.test(normalized)) {
+    kinds.push("place");
+    categorySlugs.push("culture");
+  }
+  if (/\battractions?\b/i.test(normalized)) {
+    kinds.push("place");
+    categorySlugs.push("attraction");
+  }
+  if (/\b(parks?|outdoors)\b/i.test(normalized)) {
+    kinds.push("place");
+    categorySlugs.push("outdoors");
+  }
+  if (/\bshopping\b/i.test(normalized)) {
+    kinds.push("place");
+    categorySlugs.push("shopping");
+  }
+  if (/\b(wellness|spas?)\b/i.test(normalized)) {
+    kinds.push("place");
+    categorySlugs.push("wellness");
+  }
+  if (/\b(things to do|what to do|what should i do)\b/i.test(normalized) && !discover) {
+    kinds.push("place");
   }
 
   for (const cuisine of CUISINES) {
@@ -153,8 +187,7 @@ function buildCandidate(normalized: string, locale: string): ParsedIntent {
     }
   }
 
-  const topical = [...categorySlugs];
-  const freeText = mode === "natural" ? topical.join(" ") || normalized : normalized;
+  const freeText = residualQuery(normalized);
   const confidence = kinds.length > 0 || budget || timeWindow.kind !== "none" || location.mode !== "selected" ? 0.84 : 0.55;
 
   return {
@@ -168,7 +201,12 @@ function buildCandidate(normalized: string, locale: string): ParsedIntent {
     tagSlugs: unique(tagSlugs),
     freeText,
     location,
-    radiusMeters: location.mode === "near_me" ? 5_000 : location.mode === "text" ? 15_000 : null,
+    radiusMeters:
+      location.mode === "near_me"
+        ? limits.defaultRadiusMeters
+        : location.mode === "text" || location.mode === "selected"
+          ? limits.cityBrowseRadiusMeters
+          : null,
     timeWindow,
     partySize,
     budget,
@@ -178,4 +216,20 @@ function buildCandidate(normalized: string, locale: string): ParsedIntent {
 
 function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
+}
+
+/** Words already represented as category, time, or availability constraints. */
+function residualQuery(normalized: string): string {
+  const cuisines = CUISINES.join("|");
+  return normalized
+    .replace(
+      new RegExp(
+        `\\b(${cuisines}|restaurants?|cafes?|coffee|food|hotels?|stays?|nightlife|bars?|culture|cultural|museums?|attractions?|parks?|outdoors|shopping|wellness|spas?|things to do|what to do|what should i do|tonight|this weekend|open now|near me|with friends|best|top|great|good|something|please)\\b`,
+        "gi",
+      ),
+      " ",
+    )
+    .replace(/[?!.,]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

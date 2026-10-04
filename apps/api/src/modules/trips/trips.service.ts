@@ -48,7 +48,7 @@ export class TripsService {
 
   async list(userId: string) {
     const result = await this.pool.query(
-      `select t.id, t.title, t.starts_on, t.ends_on, t.timezone, l.label
+      `select t.id, t.title, to_char(t.starts_on, 'YYYY-MM-DD') as starts_on, to_char(t.ends_on, 'YYYY-MM-DD') as ends_on, t.timezone, l.label
        from trips t join resolved_locations l on l.id = t.destination_location_id
        where t.owner_user_id = $1 and t.deleted_at is null
        order by t.starts_on`,
@@ -69,7 +69,7 @@ export class TripsService {
       throw new AppError(ErrorCodes.NOT_FOUND, "That trip is not available.", 404);
     }
     const trip = await this.pool.query(
-      `select t.id, t.title, t.starts_on, t.ends_on, t.timezone, l.label
+      `select t.id, t.title, to_char(t.starts_on, 'YYYY-MM-DD') as starts_on, to_char(t.ends_on, 'YYYY-MM-DD') as ends_on, t.timezone, l.label
        from trips t join resolved_locations l on l.id = t.destination_location_id
        where t.id = $1 and t.owner_user_id = $2 and t.deleted_at is null`,
       [tripId, userId],
@@ -78,22 +78,30 @@ export class TripsService {
     if (!row) {
       throw new AppError(ErrorCodes.NOT_FOUND, "That trip is not available.", 404);
     }
+    const dayRows = await this.pool.query(
+      `select id, to_char(civil_date, 'YYYY-MM-DD') as civil_date
+       from trip_days where trip_id = $1 order by position`,
+      [tripId],
+    );
     const items = await this.pool.query(
       `select i.id, i.trip_day_id, i.subject_id, i.slot, to_char(i.local_time, 'HH24:MI') as local_time, i.notes,
-              coalesce(tr.name, 'Untitled') as title, s.kind, d.civil_date
+              coalesce(tr.name, 'Untitled') as title, s.kind
        from trip_items i
        join catalog_subjects s on s.id = i.subject_id and s.deleted_at is null
        left join subject_translations tr on tr.subject_id = s.id and tr.locale = 'en'
-       left join trip_days d on d.id = i.trip_day_id
        where i.trip_id = $1
-       order by d.civil_date nulls last, i.local_time nulls last, i.position`,
+       order by i.local_time nulls last, i.position`,
       [tripId],
     );
-    const days = new Map<string, { id: string; date: string; items: { id: string; subjectId: string; title: string; kind: CatalogKind; slot: "morning" | "lunch" | "afternoon" | "dinner" | "night" | "unscheduled"; localTime: string | null; notes: string | null }[] }>();
+    type DayItem = { id: string; subjectId: string; title: string; kind: CatalogKind; slot: "morning" | "lunch" | "afternoon" | "dinner" | "night" | "unscheduled"; localTime: string | null; notes: string | null };
+    const days = new Map<string, { id: string; date: string; items: DayItem[] }>();
+    for (const day of dayRows.rows) {
+      days.set(String(day.id), { id: String(day.id), date: String(day.civil_date), items: [] });
+    }
+    const firstDay = days.values().next().value as { id: string; date: string; items: DayItem[] } | undefined;
     for (const item of items.rows) {
-      const date = item.civil_date ? String(item.civil_date).slice(0, 10) : String(row.starts_on).slice(0, 10);
-      const dayId = item.trip_day_id ? String(item.trip_day_id) : String(row.id);
-      const day = days.get(dayId) ?? { id: dayId, date, items: [] };
+      const day = (item.trip_day_id ? days.get(String(item.trip_day_id)) : undefined) ?? firstDay;
+      if (!day) continue;
       day.items.push({
         id: String(item.id),
         subjectId: String(item.subject_id),
@@ -103,7 +111,6 @@ export class TripsService {
         localTime: item.local_time ? String(item.local_time) : null,
         notes: item.notes ? String(item.notes) : null,
       });
-      days.set(dayId, day);
     }
     return tripDetailSchema.parse({
       id: String(row.id),

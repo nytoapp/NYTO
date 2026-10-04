@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import { limits } from "@atlas/config";
-import { ErrorCodes, type ParsedIntent, type SearchRequest, type SearchResponse, type SearchResult } from "@atlas/contracts";
+import { classifyGuideRequest, ErrorCodes, type ParsedIntent, type SearchRequest, type SearchResponse, type SearchResult } from "@atlas/contracts";
 import type { Pool } from "pg";
 import { AppError } from "../../shared/http/app-error";
 import { logError, timed } from "../../shared/observability/logger";
@@ -23,15 +23,42 @@ export class SearchService {
   ) {}
 
   async search(request: SearchRequest, userId: string | null, requestId: string): Promise<SearchResponse> {
-    const intent = interpretWithRules(request.query, request.locale);
-    if (intent.freeText.length === 0 && intent.task !== "discover") {
+    const guide = classifyGuideRequest(request.query);
+    if (guide.searchQuery === null) {
       return {
         results: [],
         interpretation: null,
         resolvedTime: null,
         locationLabel: null,
         relaxed: [],
-        notices: [{ code: "EMPTY_QUERY", message: "Enter a place, event, or idea." }],
+        notices: [
+          {
+            code: "GUIDE_HOLD",
+            message: guide.message ?? "I can build that once CITYDAY has enough places and experiences in this city.",
+          },
+        ],
+      };
+    }
+    const intent = interpretWithRules(request.query, request.locale);
+    const hasConstraint =
+      intent.categorySlugs.length > 0 ||
+      intent.kinds.length > 0 ||
+      intent.tagSlugs.length > 0 ||
+      intent.timeWindow.kind !== "none" ||
+      intent.task === "discover";
+    if (intent.freeText.length === 0 && !hasConstraint) {
+      const openNow = /\bopen now\b/i.test(request.query);
+      return {
+        results: [],
+        interpretation: null,
+        resolvedTime: null,
+        locationLabel: null,
+        relaxed: [],
+        notices: [
+          openNow
+            ? { code: "HOURS_UNKNOWN", message: "CITYDAY does not have opening hours, so open now cannot be applied." }
+            : { code: "EMPTY_QUERY", message: "Enter a place, event, or idea." },
+        ],
       };
     }
     const located = await timed("search.location", requestId, () => this.resolveLocation(intent, request, userId));
@@ -74,6 +101,9 @@ export class SearchService {
     const notices = [
       ...(internalFailed ? [{ code: "PARTIAL", message: "Some catalog results could not be loaded." }] : []),
       ...providers.warnings.map((warning) => ({ code: warning.code, message: warning.message })),
+      ...(/\bopen now\b/i.test(request.query)
+        ? [{ code: "HOURS_UNKNOWN", message: "Opening hours are not in CITYDAY, so these places are not filtered by open now." }]
+        : []),
     ];
     const ids = ranked.flatMap((item) => (item.subjectId ? [item.subjectId] : []));
     let facts = new Map<string, CatalogFacts>();

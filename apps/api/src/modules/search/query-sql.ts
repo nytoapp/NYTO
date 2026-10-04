@@ -54,7 +54,7 @@ export function buildCatalogSearchSql(input: {
         OR d.title ILIKE ${likeParam}
       )
       AND (cardinality(${kinds}::text[]) = 0 OR d.kind = ANY(${kinds}::text[]))
-      AND (cardinality(${categories}::text[]) = 0 OR d.category_slugs && ${categories}::text[])
+      AND (cardinality(${categories}::text[]) = 0 OR d.category_slugs @> ${categories}::text[])
       AND (
         ${longitude}::float8 IS NULL
         OR d.geog IS NULL

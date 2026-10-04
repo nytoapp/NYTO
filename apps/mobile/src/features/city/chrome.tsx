@@ -1,11 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type ImageStyle, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { Keyboard, Pressable, StyleSheet, Text, View, type ImageStyle, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Place } from "./catalog";
-import { useLibrary } from "./library";
 import { CityImage } from "./image";
 import { city, cityRadius, citySpace, color, elevation } from "./theme";
 
@@ -79,72 +77,6 @@ export function Photo({ uri, style }: { uri: string; style?: StyleProp<ImageStyl
   return <CityImage uri={uri} style={[styles.photo, style]} />;
 }
 
-/** Legacy local save control. Live saves use the API on the detail screen. Safe to remove with RailCard and ResultCard. */
-export function FavoriteButton({ id }: { id: string }) {
-  const saved = useLibrary((state) => state.savedIds.includes(id));
-  const toggle = useLibrary((state) => state.toggleSaved);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={saved ? "Remove from saved" : "Save"}
-      accessibilityState={{ selected: saved }}
-      hitSlop={8}
-      onPress={() => toggle(id)}
-      style={({ pressed }) => [styles.heart, pressed && styles.pressed]}
-    >
-      <Ionicons name={saved ? "heart" : "heart-outline"} size={18} color={saved ? city.danger : city.ink} />
-    </Pressable>
-  );
-}
-
-export function RailCard({ place }: { place: Place }) {
-  const router = useRouter();
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={place.title} onPress={() => router.push(`/place/${place.id}`)} style={({ pressed }) => [styles.rail, pressed && styles.pressed]}>
-      <View>
-        <Photo uri={place.image} style={styles.railImage} />
-        <View style={styles.railHeart}>
-          <FavoriteButton id={place.id} />
-        </View>
-      </View>
-      <CityText size="section" style={styles.railTitle}>
-        {place.title}
-      </CityText>
-      <CityText size="meta" tone="muted">
-        {place.rating} · {place.category} · {place.neighborhood}
-      </CityText>
-    </Pressable>
-  );
-}
-
-export function ResultCard({ place }: { place: Place }) {
-  const router = useRouter();
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={place.title} onPress={() => router.push(`/place/${place.id}`)} style={({ pressed }) => [styles.result, pressed && styles.pressed]}>
-      <Photo uri={place.image} style={styles.resultImage} />
-      <View style={styles.resultCopy}>
-        <View style={styles.resultTop}>
-          <CityText size="section" style={styles.flexText}>
-            {place.title}
-          </CityText>
-          <FavoriteButton id={place.id} />
-        </View>
-        <CityText size="meta" tone="muted">
-          {place.rating} · {place.reviews} notes
-        </CityText>
-        <CityText size="meta" tone="muted">
-          {place.category} · {place.neighborhood} · {place.price}
-        </CityText>
-        {place.when ? (
-          <CityText size="caption" tone="ink">
-            {place.when}
-          </CityText>
-        ) : null}
-      </View>
-    </Pressable>
-  );
-}
-
 export function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return (
     <View style={styles.sectionTitle}>
@@ -165,12 +97,16 @@ export function EmptyState({
   body,
   action,
   onAction,
+  secondary,
+  onSecondary,
   icon,
 }: {
   title: string;
   body: string;
   action?: string;
   onAction?: () => void;
+  secondary?: string;
+  onSecondary?: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
 }) {
   return (
@@ -181,6 +117,7 @@ export function EmptyState({
         {body}
       </CityText>
       {action && onAction ? <DarkButton label={action} onPress={onAction} /> : null}
+      {secondary && onSecondary ? <QuietButton label={secondary} onPress={onSecondary} /> : null}
     </View>
   );
 }
@@ -188,6 +125,16 @@ export function EmptyState({
 export function GuideFab({ from }: { from?: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  if (keyboardOpen) return null;
   return (
     <Pressable
       accessibilityRole="button"
@@ -214,7 +161,6 @@ export function PhotoWash({ children, style }: { children?: ReactNode; style?: S
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: city.page },
   flex: { flex: 1 },
-  flexText: { flex: 1 },
   display: { fontSize: 34, lineHeight: 38, fontWeight: "600", letterSpacing: -0.8 },
   title: { fontSize: 26, lineHeight: 31, fontWeight: "600", letterSpacing: -0.5 },
   section: { fontSize: 17, lineHeight: 22, fontWeight: "600", letterSpacing: -0.2 },
@@ -237,30 +183,6 @@ const styles = StyleSheet.create({
   quietLabel: { color: city.muted, fontSize: 15, fontWeight: "500" },
   pressed: { opacity: 0.88, transform: [{ scale: 0.985 }] },
   photo: { backgroundColor: city.photo },
-  heart: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(255,252,248,0.92)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rail: { width: 220, gap: 8 },
-  railImage: { width: 220, height: 160, borderRadius: cityRadius.image },
-  railHeart: { position: "absolute", top: 10, right: 10 },
-  railTitle: { marginTop: 2 },
-  result: {
-    flexDirection: "row",
-    gap: 12,
-    padding: 10,
-    backgroundColor: city.paper,
-    borderRadius: cityRadius.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: city.line,
-  },
-  resultImage: { width: 92, height: 92, borderRadius: 12 },
-  resultCopy: { flex: 1, gap: 3, justifyContent: "center" },
-  resultTop: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   sectionTitle: {
     flexDirection: "row",
     alignItems: "flex-end",

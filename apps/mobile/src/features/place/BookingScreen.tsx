@@ -1,4 +1,4 @@
-import type { SubjectDetail } from "@atlas/contracts";
+import type { DestinationResolveResponse } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -6,9 +6,9 @@ import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../../api/client";
+import { loadSubject } from "../subject/load-subject";
 import { CityText, DarkButton, EmptyState, Photo } from "../city/chrome";
 import { city, cityRadius, citySpace } from "../city/theme";
-import type { DestinationResolveResponse } from "@atlas/contracts";
 
 export function BookingScreen() {
   const router = useRouter();
@@ -18,11 +18,7 @@ export function BookingScreen() {
   const subject = useQuery({
     queryKey: ["subject", subjectId],
     enabled: subjectId.length > 0,
-    queryFn: async () => {
-      const response = await apiRequest<SubjectDetail>(`/api/v1/subjects/${subjectId}`);
-      if (response.error || !response.data) throw new Error(response.error?.message ?? "This place is not available.");
-      return response.data;
-    },
+    queryFn: () => loadSubject(subjectId),
   });
   const open = useMutation({
     mutationFn: async (destinationId: string) => {

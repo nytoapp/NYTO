@@ -1,13 +1,15 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CityText, EmptyState, GuideFab, SectionTitle } from "../city/chrome";
-import { SubjectRailCard } from "../city/cards";
-import { localHour, localWeekday } from "../city/format";
-import { city, citySpace } from "../city/theme";
-import { destinations } from "../discovery/browse";
+import { IconButton } from "../city/buttons";
+import { EmptyState, GuideFab } from "../city/chrome";
+import { categoryArt } from "../city/category-art";
+import { isCatalogId, localHour, localWeekday } from "../city/format";
+import { LargePlaceCard, placeCardFromResult } from "../city/place-card";
+import { SearchBar } from "../city/search-bar";
+import { CardSkeleton } from "../city/skeleton";
+import { color, font, fontScaleCap, space } from "../city/theme";
 import { friendlyError } from "../../lib/errors";
 import { useDiscoveryLocation } from "../location/location-store";
 import { useHome } from "./useHome";
@@ -21,69 +23,46 @@ function greeting(hour: number): string {
 export function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const cardWidth = Math.min(280, Math.round(width * 0.74));
   const selected = useDiscoveryLocation((state) => state.selected);
-  const setSelected = useDiscoveryLocation((state) => state.setSelected);
+  const hydrated = useDiscoveryLocation((state) => state.hydrated);
   const home = useHome();
   const zone = home.data?.timezone ?? selected?.timezone ?? null;
   const hour = localHour(zone);
-  const place = home.data?.locationLabel ?? selected?.label ?? "your city";
+  const place = home.data?.locationLabel ?? selected?.label ?? null;
+  const rails = Array.isArray(home.data?.rails) ? home.data.rails : [];
+  const explore = Array.isArray(home.data?.explore) ? home.data.explore : [];
+  const hasItems = rails.some((rail) => Array.isArray(rail.items) && rail.items.length > 0);
 
   return (
-    <View style={styles.screen}>
+    <View style={{ flex: 1, backgroundColor: color.background }}>
       <StatusBar style="dark" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 120 }}>
-        <View style={styles.mast}>
-          <View style={styles.brandRow}>
-            <CityText size="caption" tone="quiet">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + space[8], paddingBottom: insets.bottom + 150 }}>
+        <View style={{ paddingHorizontal: space.page, gap: space[8] }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, { color: color.mutedText, letterSpacing: 1.2 }]}>
               CITYDAY
-            </CityText>
-            <Pressable accessibilityRole="button" accessibilityLabel="Profile" onPress={() => router.push("/profile")} style={styles.bell}>
-              <Ionicons name="person-outline" size={20} color={city.ink} />
-            </Pressable>
+            </Text>
+            <IconButton label="Profile" icon="person-outline" onPress={() => router.push("/profile")} />
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cities}>
-            {destinations.map((destination) => {
-              const on = destination.location ? selected?.id === destination.location.id : selected === null;
-              return (
-                <Pressable
-                  key={destination.label}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                  accessibilityLabel={`Browse ${destination.label}`}
-                  onPress={() => setSelected(destination.location)}
-                  style={[styles.cityChip, on && styles.cityChipOn]}
-                >
-                  <CityText size="meta" tone={on ? "onDark" : "ink"}>
-                    {destination.label}
-                  </CityText>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <CityText size="display" style={styles.hello}>
+          <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.display, { color: color.primaryText }]}>
             {greeting(hour)}
-          </CityText>
-          <CityText tone="muted">
-            {place} · {localWeekday(zone)}
-          </CityText>
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={place ? `Discovery city ${place}` : "Choose a city"} onPress={() => router.push("/city")}>
+            <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, { color: color.secondaryText }]}>
+              {place ? `${place} · ${localWeekday(zone)}` : "Choose a city"}
+            </Text>
+          </Pressable>
         </View>
 
-        <Pressable accessibilityRole="search" accessibilityLabel="Search the city" onPress={() => router.push("/search")} style={styles.search}>
-          <Ionicons name="search-outline" size={18} color={city.quiet} />
-          <CityText tone="quiet">What do you want to do?</CityText>
-        </Pressable>
+        <View style={{ marginTop: space[20], paddingHorizontal: space.page }}>
+          <SearchBar value="" editable={false} placeholder="What do you want to do?" accessibilityLabel="Search the city" onPress={() => router.push("/search")} />
+        </View>
 
-        <Pressable accessibilityRole="button" accessibilityLabel="Build my evening" onPress={() => router.push("/evening")} style={styles.plan}>
-          <CityText size="section">Build my evening</CityText>
-          <CityText size="meta" tone="muted">
-            A search for the kind of night you want.
-          </CityText>
-        </Pressable>
-
-        {home.isLoading ? (
-          <View style={styles.pad}>
-            <View style={styles.skeleton} />
-            <View style={styles.skeletonShort} />
+        {!hydrated || home.isLoading ? (
+          <View style={{ paddingHorizontal: space.page, marginTop: space[24] }}>
+            <CardSkeleton />
           </View>
         ) : null}
 
@@ -91,76 +70,69 @@ export function HomeScreen() {
           <EmptyState title="The city guide didn't load" body={friendlyError(home.error, "The catalog could not be reached. Try again.")} action="Try again" onAction={() => void home.refetch()} />
         ) : null}
 
-        {home.data && home.data.explore.length > 0 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcuts}>
-            {home.data.explore.map((item) => (
-              <Pressable key={item.slug} accessibilityRole="button" accessibilityLabel={item.label} onPress={() => router.push({ pathname: "/results", params: { q: item.label } })} style={styles.shortcut}>
-                <CityText size="meta">{item.label}</CityText>
+        {explore.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: space.page, gap: space[12], paddingVertical: space[20] }}>
+            {explore.map((item) => (
+              <Pressable key={item.slug} accessibilityRole="button" accessibilityLabel={item.label} onPress={() => router.push({ pathname: "/results", params: { q: item.label } })} style={{ width: 76, alignItems: "center", gap: space[8] }}>
+                <Image source={categoryArt(item.label)} style={{ width: 64, height: 64, borderRadius: 20 }} />
+                <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} numberOfLines={1} style={[font.caption, { color: color.primaryText }]}>
+                  {item.label}
+                </Text>
               </Pressable>
             ))}
           </ScrollView>
         ) : null}
 
-        {home.data?.rails.map((rail) => (
-          <View key={rail.key} style={styles.railBlock}>
-            <SectionTitle title={rail.title} />
-            {rail.items.length === 0 ? (
-              <View style={styles.pad}>
-                <CityText tone="muted">Nothing is published on this rail yet.</CityText>
-              </View>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-                {rail.items.map((item) => (
-                  <SubjectRailCard key={item.id} item={item} />
+        <View style={{ paddingHorizontal: space.page, flexDirection: "row", gap: space[12], marginBottom: space[24] }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Build my evening" onPress={() => router.push("/evening")} style={{ flex: 1, minHeight: 48, borderRadius: 16, backgroundColor: color.surface, borderWidth: 1, borderColor: color.border, alignItems: "center", justifyContent: "center", paddingHorizontal: space[12] }}>
+            <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.label, { color: color.primaryText }]}>
+              Build my evening
+            </Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Map" onPress={() => router.push({ pathname: "/map", params: { q: "things to do" } })} style={{ flex: 1, minHeight: 48, borderRadius: 16, backgroundColor: color.surface, borderWidth: 1, borderColor: color.border, alignItems: "center", justifyContent: "center" }}>
+            <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.label, { color: color.primaryText }]}>
+              Map
+            </Text>
+          </Pressable>
+        </View>
+
+        {rails.map((rail) => {
+          const items = Array.isArray(rail.items) ? rail.items : [];
+          if (items.length === 0) return null;
+          return (
+            <View key={rail.key} style={{ marginBottom: space[24] }}>
+              <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.h2, { color: color.primaryText, paddingHorizontal: space.page, marginBottom: space[12] }]}>
+                {rail.title}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: space.page, gap: space[16], paddingRight: space.page }}>
+                {items.map((item) => (
+                  <View key={item.id} style={{ width: cardWidth }}>
+                    <LargePlaceCard
+                      place={placeCardFromResult(item)}
+                      onPress={isCatalogId(item.id) ? () => router.push(`/subject/${item.id}`) : undefined}
+                    />
+                  </View>
                 ))}
               </ScrollView>
-            )}
-          </View>
-        ))}
+            </View>
+          );
+        })}
 
-        {home.data && home.data.rails.every((rail) => rail.items.length === 0) ? (
-          <EmptyState title="This city is still quiet" body="The catalog has no places for this location yet. Search still uses the same guide." action="Search" onAction={() => router.push("/search")} />
+        {hydrated && !home.isLoading && !home.isError && !hasItems ? (
+          <EmptyState
+            title={place ? "Nothing to show here yet" : "Choose a city"}
+            body={
+              place
+                ? `${place} does not have published places in CITYDAY yet. Search still uses the same guide.`
+                : "Pick the city you want to explore. CITYDAY does not use your phone's location for this."
+            }
+            action={place ? "Search" : "Choose a city"}
+            onAction={() => router.push(place ? "/search" : "/city")}
+          />
         ) : null}
 
-        <Pressable accessibilityRole="button" accessibilityLabel="Open the map" onPress={() => router.push({ pathname: "/map", params: { q: "things to do" } })} style={styles.mapLink}>
-          <Ionicons name="map-outline" size={18} color={city.ink} />
-          <CityText size="section">Map</CityText>
-        </Pressable>
       </ScrollView>
       <GuideFab from="Home" />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: city.page },
-  mast: { paddingHorizontal: citySpace.page },
-  brandRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  bell: { width: 44, height: 44, alignItems: "flex-end", justifyContent: "center" },
-  cities: { gap: 8, paddingVertical: 8 },
-  cityChip: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: city.chip },
-  cityChipOn: { backgroundColor: city.ink },
-  hello: { marginTop: 18 },
-  search: {
-    marginTop: 18,
-    marginHorizontal: citySpace.page,
-    minHeight: 52,
-    borderRadius: 16,
-    backgroundColor: city.paper,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: city.line,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 16,
-  },
-  plan: { marginTop: 14, marginHorizontal: citySpace.page, gap: 4 },
-  shortcuts: { paddingHorizontal: citySpace.page, gap: 8, paddingVertical: 18 },
-  shortcut: { borderRadius: 999, backgroundColor: city.chip, paddingHorizontal: 14, paddingVertical: 8 },
-  railBlock: { marginBottom: 22 },
-  rail: { paddingHorizontal: citySpace.page, gap: 14 },
-  pad: { paddingHorizontal: citySpace.page, gap: 10 },
-  skeleton: { height: 150, borderRadius: 16, backgroundColor: city.photo, marginTop: 20 },
-  skeletonShort: { height: 18, width: "46%", borderRadius: 8, backgroundColor: city.photo },
-  mapLink: { marginTop: 8, marginHorizontal: citySpace.page, minHeight: 52, flexDirection: "row", alignItems: "center", gap: 10 },
-});
