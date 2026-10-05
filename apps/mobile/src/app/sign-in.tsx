@@ -483,6 +483,7 @@ export default function SignInScreen() {
                   setCountry(item);
                   setNational((current) => digitsFor(item, current));
                   setFieldNote(null);
+                  if (start.isError) start.reset();
                   setPicking(false);
                   setCountryQuery("");
                 }}
