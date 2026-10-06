@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { useMemo, useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -46,7 +47,7 @@ export function SearchScreen() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: color.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <StatusBar style="dark" />
       <View style={{ paddingTop: insets.top + space[8], paddingLeft: space[8], paddingRight: 48, paddingBottom: space[8], flexDirection: "row", alignItems: "center", gap: space[4] }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/")} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
           <Ionicons name="chevron-back" size={22} color={color.primaryText} />
         </Pressable>
         <View style={{ flex: 1 }}>

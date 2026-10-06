@@ -1,6 +1,7 @@
 import type { SearchResult } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { useEffect, useMemo } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -58,11 +59,11 @@ export function MapScreen() {
         ) : null}
         {search.isSuccess && located.length === 0 ? (
           <View style={styles.empty}>
-            <EmptyState title="No mapped places" body="This search has no coordinates to pin." action="Back" onAction={() => router.back()} />
+            <EmptyState title="No mapped places" body="This search has no coordinates to pin." action="Back" onAction={() => leave(router, "/")} />
           </View>
         ) : null}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={[styles.back, { top: insets.top + 12 }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/")} style={[styles.back, { top: insets.top + 12 }]}>
         <Ionicons name="chevron-back" size={22} color={city.ink} />
       </Pressable>
       {selected ? (

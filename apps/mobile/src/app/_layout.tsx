@@ -1,7 +1,8 @@
 import "../i18n";
 import { useEffect } from "react";
+import { BackHandler } from "react-native";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppErrorBoundary } from "../components/ErrorBoundary";
@@ -11,6 +12,7 @@ import { queryClient } from "../lib/query-client";
 import { useAuth } from "../features/auth/session";
 import { revealApp } from "../features/landing/reveal";
 import { useDiscoveryLocation } from "../features/location/location-store";
+import { dismiss } from "../features/nav/leave";
 import { useOnboarding } from "../features/onboarding/store";
 
 void SplashScreen.preventAutoHideAsync();
@@ -20,6 +22,12 @@ function Startup() {
   const restore = useAuth((state) => state.restore);
   const hydrated = useOnboarding((state) => state.hydrated);
   const hydrateLocation = useDiscoveryLocation((state) => state.hydrate);
+  const router = useRouter();
+  const pathname = usePathname();
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => dismiss(router, pathname));
+    return () => subscription.remove();
+  }, [pathname, router]);
   useEffect(() => {
     void restore();
     void hydrateLocation();

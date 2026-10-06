@@ -17,7 +17,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { serif } from "../../components/theme/tokens";
-import { useOnboarding } from "../onboarding/store";
 import { landingFadeMs, landingHoldMs, stockholmLanding, type LandingContent, type LandingFrame } from "./content";
 import { revealApp } from "./reveal";
 
@@ -295,7 +294,6 @@ export function LandingScreen({ content = stockholmLanding }: { content?: Landin
   const focused = useIsFocused();
   const appActive = useAppActive();
   const reduced = useReducedMotion();
-  const setStage = useOnboarding((state) => state.setStage);
   const leaving = useRef(false);
   const compact = height < 700;
 
@@ -305,18 +303,10 @@ export function LandingScreen({ content = stockholmLanding }: { content?: Landin
     }, []),
   );
 
-  function go(path: "/interests" | "/sign-in") {
+  function go(mode: "create" | "login") {
     if (leaving.current) return;
     leaving.current = true;
-    if (path === "/sign-in") {
-      router.push(path);
-      return;
-    }
-    void setStage("interests")
-      .then(() => router.push("/interests"))
-      .catch(() => {
-        leaving.current = false;
-      });
+    router.push({ pathname: "/sign-in", params: { mode } });
   }
 
   return (
@@ -339,8 +329,8 @@ export function LandingScreen({ content = stockholmLanding }: { content?: Landin
       </View>
       <View style={styles.spacer} />
       <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 12) + 16 }]}>
-        <LandingButton label="Get started" variant="primary" onPress={() => go("/interests")} />
-        <LandingButton label="Log in" variant="secondary" onPress={() => go("/sign-in")} />
+        <LandingButton label="Create account" variant="primary" onPress={() => go("create")} />
+        <LandingButton label="Log in" variant="secondary" onPress={() => go("login")} />
       </View>
     </View>
   );

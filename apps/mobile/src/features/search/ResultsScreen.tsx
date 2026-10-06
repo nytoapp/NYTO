@@ -1,12 +1,12 @@
 import { buildResultFilters, removeFilterPhrase, type ResultFilter, type SearchResult } from "@atlas/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../../api/client";
-import { SignInSheet } from "../auth/SignInSheet";
 import { useSession } from "../auth/useSession";
 import { IconButton } from "../city/buttons";
 import { EmptyState, GuideFab } from "../city/chrome";
@@ -29,11 +29,9 @@ export function ResultsScreen() {
   const [draft, setDraft] = useState(initial);
   const [phrases, setPhrases] = useState<string[]>([]);
   const [sort, setSort] = useState<"Recommended" | "Nearby">("Recommended");
-  const [signIn, setSignIn] = useState(false);
-  const [pendingId, setPendingId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const search = useSearch();
-  const { signedIn, refresh } = useSession();
+  const { signedIn } = useSession();
   const saves = useQuery({
     queryKey: ["saves"],
     enabled: signedIn,
@@ -89,8 +87,7 @@ export function ResultsScreen() {
   async function saveSubject(id: string) {
     if (!isCatalogId(id)) return;
     if (!signedIn) {
-      setPendingId(id);
-      setSignIn(true);
+      router.push({ pathname: "/sign-in", params: { mode: "login" } });
       return;
     }
     setSaveError(null);
@@ -109,7 +106,7 @@ export function ResultsScreen() {
       <StatusBar style="dark" />
       <View style={{ paddingTop: insets.top + space[8], paddingHorizontal: space.page, gap: space[12] }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[4] }}>
-          <IconButton label="Back" icon="chevron-back" onPress={() => router.back()} />
+          <IconButton label="Back" icon="chevron-back" onPress={() => leave(router, "/search")} />
           <View style={{ flex: 1 }}>
             <SearchBar
               value={draft}
@@ -178,23 +175,6 @@ export function ResultsScreen() {
           : null}
       </ScrollView>
       <GuideFab from="Results" />
-      <SignInSheet
-        visible={signIn}
-        onClose={() => setSignIn(false)}
-        onSignedIn={() => {
-          const subjectId = pendingId;
-          void refresh().then(async () => {
-            if (!subjectId || !isCatalogId(subjectId)) return;
-            setSaveError(null);
-            const response = await apiRequest<{ id: string }>("/api/v1/saves", { method: "POST", body: JSON.stringify({ subjectId }) });
-            if (response.error) {
-              setSaveError(response.error.message);
-              return;
-            }
-            void saves.refetch();
-          });
-        }}
-      />
     </View>
   );
 }

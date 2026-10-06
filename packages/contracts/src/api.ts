@@ -257,9 +257,12 @@ export const tripItemRequestSchema = z
   })
   .strict();
 
+const phoneIntentSchema = z.enum(["login", "create"]);
+
 export const phoneStartRequestSchema = z
   .object({
     phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/),
+    intent: phoneIntentSchema,
   })
   .strict();
 
@@ -267,6 +270,7 @@ export const phoneVerifyRequestSchema = z
   .object({
     phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/),
     code: z.string().regex(/^\d{6}$/),
+    intent: phoneIntentSchema,
     device: z
       .object({
         platform: z.enum(["ios", "android", "web"]),

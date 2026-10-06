@@ -76,7 +76,7 @@ export function SavedScreen() {
           })}
         </ScrollView>
         <View style={styles.list}>
-          {!restoring && !signedIn ? <EmptyState title="Your saves live here" body="Sign in to keep places you want to come back to." action="Sign in" onAction={() => router.push("/sign-in")} /> : null}
+          {!restoring && !signedIn ? <EmptyState title="Your saves live here" body="Log in to keep places you want to come back to." action="Log in" onAction={() => router.push({ pathname: "/sign-in", params: { mode: "login" } })} /> : null}
           {loading ? <ListSkeleton /> : null}
           {failed && !loading ? (
             <EmptyState title="Couldn't load your saves" body="We couldn't retrieve your saved places right now." action="Try again" onAction={retry} />

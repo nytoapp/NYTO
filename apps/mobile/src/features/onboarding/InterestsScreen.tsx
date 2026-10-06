@@ -9,6 +9,7 @@ import { IconButton, PrimaryButton } from "../city/buttons";
 import { color, font, fontScaleCap, motion, radius, space } from "../city/theme";
 import { revealApp } from "../landing/reveal";
 import { interests } from "./interests";
+import { leave } from "../nav/leave";
 import { useOnboarding } from "./store";
 
 const gap = space[12];
@@ -58,10 +59,10 @@ export function InterestsScreen() {
 
   function back() {
     if (stage === "app") {
-      router.back();
+      leave(router, "/");
       return;
     }
-    void setStage("welcome").then(() => router.back());
+    void setStage("welcome").then(() => router.replace("/welcome"));
   }
 
   return (

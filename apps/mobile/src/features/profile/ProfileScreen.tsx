@@ -100,7 +100,7 @@ export function ProfileScreen() {
               <CityText>Sign out</CityText>
             </Pressable>
           ) : (
-            <Pressable accessibilityRole="button" accessibilityLabel="Log in" onPress={() => router.push("/sign-in")} style={styles.signOut}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Log in" onPress={() => router.push({ pathname: "/sign-in", params: { mode: "login" } })} style={styles.signOut}>
               <CityText>Log in</CityText>
             </Pressable>
           )}

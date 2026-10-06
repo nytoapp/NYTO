@@ -1,6 +1,7 @@
 import type { GeoCandidate } from "@atlas/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -39,7 +40,7 @@ export function CityScreen() {
       timezone: city.timezone,
     };
     setSelected(next);
-    router.back();
+    leave(router, "/");
   }
 
   return (
@@ -50,7 +51,7 @@ export function CityScreen() {
         contentContainerStyle={{ paddingTop: insets.top + space[8], paddingBottom: insets.bottom + space[32], paddingHorizontal: space.page, gap: space[16] }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[8] }}>
-          <IconButton label="Back" icon="chevron-back" onPress={() => router.back()} />
+          <IconButton label="Back" icon="chevron-back" onPress={() => leave(router, "/")} />
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.h1, { color: color.primaryText, flex: 1 }]}>
             Choose a city
           </Text>
@@ -92,7 +93,7 @@ export function CityScreen() {
             accessibilityLabel="Clear selected city"
             onPress={() => {
               setSelected(null);
-              router.back();
+              leave(router, "/");
             }}
             style={{ minHeight: 48, justifyContent: "center" }}
           >
