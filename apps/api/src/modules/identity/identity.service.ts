@@ -22,19 +22,20 @@ export class IdentityService {
     private readonly apple: AppleTokenVerifier,
   ) {}
 
-  async startPhone(phoneE164: string, requestId: string): Promise<{ challengeId: string; expiresInSeconds: number }> {
+  async startPhone(phoneE164: string, intent: "login" | "create", requestId: string): Promise<{ challengeId: string; expiresInSeconds: number }> {
     this.assertCallingCode(phoneE164);
+    await this.assertPhoneIntent(phoneE164, intent);
     await this.assertSendBudget("phone", phoneE164);
     return this.issueChallenge("phone", phoneE164, requestId);
   }
 
-  async verifyPhone(phoneE164: string, code: string, device: DeviceInput, requestId: string): Promise<AuthSession> {
+  async verifyPhone(phoneE164: string, code: string, device: DeviceInput, intent: "login" | "create", requestId: string): Promise<AuthSession> {
+    const existing = await this.assertPhoneIntent(phoneE164, intent);
     const ok = await this.repository.takeChallenge("phone", phoneE164, hashOtp(code, this.env.AUTH_REFRESH_PEPPER));
     if (!ok) {
       await this.repository.audit("auth.phone_failed", requestId, null, null);
       throw new AppError(ErrorCodes.UNAUTHORIZED, "That code is not valid.", 401);
     }
-    const existing = await this.repository.findByProvider("phone", phoneE164);
     if (existing) {
       const session = await this.repository.openSession(existing.userId, device);
       return this.issueSession(existing.userId, session.sessionId);
@@ -188,6 +189,17 @@ export class IdentityService {
     if (count >= limits.otpMaxSendsPerHour) {
       throw new AppError(ErrorCodes.RATE_LIMITED, "Too many codes were requested. Try again later.", 429, true);
     }
+  }
+
+  private async assertPhoneIntent(phoneE164: string, intent: "login" | "create"): Promise<{ userId: string } | null> {
+    const existing = await this.repository.findByProvider("phone", phoneE164);
+    if (intent === "login" && !existing) {
+      throw new AppError(ErrorCodes.NOT_FOUND, "No account for this number. Create an account.", 404);
+    }
+    if (intent === "create" && existing) {
+      throw new AppError(ErrorCodes.CONFLICT, "This number already has an account. Log in.", 409);
+    }
+    return existing;
   }
 
   private assertCallingCode(phoneE164: string): void {

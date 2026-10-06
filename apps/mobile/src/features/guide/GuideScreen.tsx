@@ -1,6 +1,7 @@
 import { classifyGuideRequest } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -58,7 +59,7 @@ export function GuideScreen() {
             {placeName} · {from}
           </CityText>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => leave(router, "/")} style={styles.close}>
           <Ionicons name="close" size={20} color={city.ink} />
         </Pressable>
       </View>

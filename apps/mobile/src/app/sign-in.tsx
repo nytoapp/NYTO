@@ -15,18 +15,20 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useMutation } from "@tanstack/react-query";
 import { getLocales } from "expo-localization";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { apiRequest, writeAccessToken } from "../api/client";
+import { apiRequest, writeSession } from "../api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { loadAccount } from "../features/auth/account";
-import { countryFlag, matchCountries, nationalNumber, phoneReady, suggestPhoneCountry, type PhoneCountry } from "../features/auth/countries";
+import { pickDevicePhone } from "../features/auth/phone-hint";
+import { countryFlag, matchCountries, nationalNumber, phoneCountries, phoneReady, suggestPhoneCountry, type PhoneCountry } from "../features/auth/countries";
 import { signInWithGoogle } from "../features/auth/google";
 import { useAuth } from "../features/auth/session";
 import { useOnboarding } from "../features/onboarding/store";
+import { leave } from "../features/nav/leave";
 import { friendlyError } from "../lib/errors";
 
 const page = "#F7F5F1";
@@ -70,6 +72,12 @@ function digitsFor(country: PhoneCountry, input: string): string {
 
 function spokenNumber(country: PhoneCountry, national: string): string {
   return `+${country.dial} ${national}`.trim();
+}
+
+function countryForDial(dial: string, current: PhoneCountry | null): PhoneCountry | null {
+  const matches = phoneCountries.filter((item) => item.dial === dial);
+  if (matches.length === 0) return null;
+  return matches.find((item) => item.iso === current?.iso) ?? matches[0] ?? null;
 }
 
 function CodeBoxes({ value, onChange }: { value: string; onChange: (next: string) => void }) {
@@ -126,15 +134,21 @@ function ProviderButton({
   );
 }
 
+type AccountMode = "create" | "login";
+
 export default function SignInScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const enterApp = useOnboarding((state) => state.enterApp);
   const setStage = useOnboarding((state) => state.setStage);
+  const stage = useOnboarding((state) => state.stage);
   const interests = useOnboarding((state) => state.interests);
   const markSignedIn = useAuth((state) => state.markSignedIn);
+  const [mode, setMode] = useState<AccountMode>(params.mode === "create" ? "create" : "login");
+  const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
   const [step, setStep] = useState<Step>("phone");
   const [country, setCountry] = useState<PhoneCountry | null>(() => suggestPhoneCountry(getLocales()[0]?.regionCode));
   const [picking, setPicking] = useState(false);
@@ -147,6 +161,7 @@ export default function SignInScreen() {
   const [providerNotice, setProviderNotice] = useState<string | null>(null);
   const sentCode = useRef("");
   const phoneLock = useRef(false);
+  const hinted = useRef(false);
   const providerLock = useRef(false);
   const enter = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const ready = country ? phoneReady(country, national) : false;
@@ -186,6 +201,10 @@ export default function SignInScreen() {
       return;
     }
     await enterApp(interests);
+    if (stage === "app" && router.canGoBack()) {
+      router.back();
+      return;
+    }
     router.replace("/");
   }
 
@@ -193,7 +212,7 @@ export default function SignInScreen() {
     mutationFn: async () => {
       const response = await apiRequest<{ challengeId: string }>("/api/v1/auth/phone/start", {
         method: "POST",
-        body: JSON.stringify({ phoneE164 }),
+        body: JSON.stringify({ phoneE164, intent: mode }),
       });
       if (response.error) throw new Error(response.error.message);
     },
@@ -210,23 +229,47 @@ export default function SignInScreen() {
 
   const verify = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest<{ accessToken: string }>("/api/v1/auth/phone/verify", {
+      const response = await apiRequest<{ accessToken: string; refreshToken: string }>("/api/v1/auth/phone/verify", {
         method: "POST",
-        body: JSON.stringify({ phoneE164, code, device: device() }),
+        body: JSON.stringify({ phoneE164, code, device: device(), intent: mode }),
       });
       if (response.error || !response.data) throw new Error(response.error?.message ?? "That code is not valid.");
-      await writeAccessToken(response.data.accessToken);
+      await writeSession(response.data);
     },
     onSuccess: () => {
       void finish();
     },
   });
 
+  function switchMode(next: AccountMode) {
+    setMode(next);
+    setStep("phone");
+    setCode("");
+    sentCode.current = "";
+    setFieldNote(null);
+    setProviderNotice(null);
+    start.reset();
+    verify.reset();
+    router.setParams({ mode: next });
+  }
+
   useEffect(() => {
     if (step !== "code" || code.length !== 6 || verify.isPending || sentCode.current === code) return;
     sentCode.current = code;
     verify.mutate();
   }, [code, step, verify]);
+
+  async function offerDeviceNumber() {
+    if (hinted.current) return;
+    hinted.current = true;
+    const picked = await pickDevicePhone();
+    if (!picked) return;
+    const nextCountry = countryForDial(picked.dial, country);
+    if (!nextCountry) return;
+    setCountry(nextCountry);
+    setNational(nationalNumber(picked.national, nextCountry.max));
+    setFieldNote(null);
+  }
 
   function requestCode() {
     if (!ready || !country || start.isPending || phoneLock.current) return;
@@ -243,28 +286,20 @@ export default function SignInScreen() {
     try {
       const result = await signInWithGoogle();
       if (result === "cancelled") return;
-      const response = await apiRequest<{ accessToken: string }>("/api/v1/auth/google", {
+      const response = await apiRequest<{ accessToken: string; refreshToken: string }>("/api/v1/auth/google", {
         method: "POST",
         body: JSON.stringify({ idToken: result.idToken, nonce: result.nonce, device: device() }),
       });
       if (response.error || !response.data) {
         throw new Error(response.error?.message ?? "Google sign-in didn't go through. Try again.");
       }
-      await writeAccessToken(response.data.accessToken);
+      await writeSession(response.data);
       await finish();
     } catch (error) {
       setProviderNotice(friendlyError(error, "Google sign-in didn't go through. Try again."));
     } finally {
       providerLock.current = false;
     }
-  }
-
-  function onApple() {
-    if (providerLock.current || start.isPending) return;
-    providerLock.current = true;
-    console.warn("[CITYDAY auth] Apple sign-in is not configured. APPLE_CLIENT_IDS is empty, and Android has no Sign in with Apple session.");
-    setProviderNotice("Apple sign-in isn't available right now.");
-    providerLock.current = false;
   }
 
   function back() {
@@ -275,7 +310,7 @@ export default function SignInScreen() {
       verify.reset();
       return;
     }
-    router.back();
+    leave(router, "/welcome");
   }
 
   const phoneError = start.error ?? (step === "code" ? verify.error : null);
@@ -296,7 +331,7 @@ export default function SignInScreen() {
         }}
       />
       <StatusBar style="dark" />
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={styles.fill} behavior="padding">
         <ScrollView
           contentContainerStyle={[styles.body, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}
           keyboardShouldPersistTaps="handled"
@@ -314,12 +349,14 @@ export default function SignInScreen() {
 
           <Animated.View style={motion}>
             <Text allowFontScaling maxFontSizeMultiplier={1.2} accessibilityRole="header" style={styles.heading}>
-              {step === "code" ? "Enter your code" : "Log in"}
+              {step === "code" ? "Enter your code" : mode === "create" ? "Create account" : "Log in"}
             </Text>
             <Text allowFontScaling maxFontSizeMultiplier={1.3} style={styles.support}>
               {step === "code"
                 ? `Enter the 6-digit code for ${country ? spokenNumber(country, national) : "your number"}.`
-                : "Sign in to continue to CITYDAY"}
+                : mode === "create"
+                  ? "We'll text a code to this number. Your name comes next."
+                  : "Use the number on your CITYDAY account."}
             </Text>
 
             {step === "phone" ? (
@@ -352,6 +389,7 @@ export default function SignInScreen() {
                     onFocus={() => {
                       setFocused(true);
                       setFieldNote(null);
+                      void offerDeviceNumber();
                     }}
                     onBlur={() => {
                       setFocused(false);
@@ -362,7 +400,7 @@ export default function SignInScreen() {
                     keyboardType="phone-pad"
                     inputMode="tel"
                     textContentType="telephoneNumber"
-                    autoComplete="tel"
+                    autoComplete="tel-device"
                     importantForAutofill="yes"
                     maxLength={24}
                     style={styles.national}
@@ -411,11 +449,6 @@ export default function SignInScreen() {
                     onPress={() => void onGoogle()}
                     mark={<Image source={googleMark} style={styles.googleMark} resizeMode="contain" accessibilityElementsHidden />}
                   />
-                  <ProviderButton
-                    label="Continue with Apple"
-                    onPress={onApple}
-                    mark={<Ionicons name="logo-apple" size={20} color={ink} />}
-                  />
                 </View>
 
                 {providerNotice ? (
@@ -450,12 +483,50 @@ export default function SignInScreen() {
           </Animated.View>
 
           {step === "phone" ? (
-            <Text allowFontScaling maxFontSizeMultiplier={1.35} style={styles.legal}>
-              By continuing, you agree to our Terms of Service and Privacy Policy.
-            </Text>
+            <View style={styles.footer}>
+              <Text allowFontScaling maxFontSizeMultiplier={1.35} style={styles.legal}>
+                By continuing, you agree to our
+              </Text>
+              <View style={styles.legalLinks}>
+                <Text allowFontScaling style={styles.legalLink} onPress={() => setLegal("terms")}>
+                  Terms of Service
+                </Text>
+                <Text allowFontScaling style={styles.legal}>
+                  and
+                </Text>
+                <Text allowFontScaling style={styles.legalLink} onPress={() => setLegal("privacy")}>
+                  Privacy Policy
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={mode === "create" ? "Log in" : "Create account"}
+                onPress={() => switchMode(mode === "create" ? "login" : "create")}
+                style={styles.switchMode}
+              >
+                <Text allowFontScaling style={styles.switchLabel}>
+                  {mode === "create" ? "Already have an account? Log in" : "New to CITYDAY? Create account"}
+                </Text>
+              </Pressable>
+            </View>
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+      <Modal visible={legal !== null} animationType="slide" onRequestClose={() => setLegal(null)}>
+        <View style={[styles.picker, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setLegal(null)} style={styles.back}>
+            <Ionicons name="chevron-back" size={26} color={ink} />
+          </Pressable>
+          <Text allowFontScaling accessibilityRole="header" style={styles.heading}>
+            {legal === "privacy" ? "Privacy Policy" : "Terms of Service"}
+          </Text>
+          <Text allowFontScaling style={styles.legalBody}>
+            {legal === "privacy"
+              ? "Your phone number is used to sign in and is stored with your account. Your name, saves, and plans stay on that account."
+              : "CITYDAY is a city guide. A place's website opens outside the app, and nothing is booked inside CITYDAY."}
+          </Text>
+        </View>
+      </Modal>
       <Modal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
         <View style={[styles.picker, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close countries" onPress={() => setPicking(false)} style={styles.back}>
@@ -514,7 +585,7 @@ const styles = StyleSheet.create({
   back: { width: 44, height: 44, alignItems: "flex-start", justifyContent: "center" },
   heading: { color: ink, fontSize: 32, lineHeight: 38, fontWeight: "600", letterSpacing: -0.45, marginTop: 8 },
   support: { color: "#736E68", fontSize: 16, lineHeight: 22, marginTop: 6 },
-  form: { marginTop: 28 },
+  form: { marginTop: 28, gap: 12 },
   phone: {
     height: 56,
     borderRadius: 16,
@@ -560,7 +631,6 @@ const styles = StyleSheet.create({
     backgroundColor: ink,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 12,
   },
   continueDisabled: { backgroundColor: "#E3DFD8" },
   continueLabel: { color: page, fontSize: 16, lineHeight: 20, fontWeight: "600" },
@@ -584,7 +654,13 @@ const styles = StyleSheet.create({
   googleMark: { width: 18, height: 18 },
   providerLabel: { color: ink, fontSize: 16, fontWeight: "600", textAlign: "center", paddingHorizontal: 44 },
   error: { color: danger, fontSize: 14, lineHeight: 20, marginTop: 12 },
-  legal: { color: muted, fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 28 },
+  footer: { marginTop: 28, gap: 8, alignItems: "center" },
+  legal: { color: muted, fontSize: 12, lineHeight: 18, textAlign: "center" },
+  legalLinks: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: 6 },
+  legalLink: { color: ink, fontSize: 12, lineHeight: 18, textDecorationLine: "underline" },
+  legalBody: { color: ink, fontSize: 16, lineHeight: 24, marginTop: 16 },
+  switchMode: { minHeight: 44, alignItems: "center", justifyContent: "center" },
+  switchLabel: { color: ink, fontSize: 15, fontWeight: "600", textAlign: "center" },
   pressed: { transform: [{ scale: 0.985 }], opacity: 0.92 },
   codeWrap: { position: "relative" },
   cells: { flexDirection: "row", gap: 8 },

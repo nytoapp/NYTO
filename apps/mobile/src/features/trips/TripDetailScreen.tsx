@@ -2,6 +2,7 @@ import type { TripDetail } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,7 +32,7 @@ export function TripDetailScreen() {
   if (trip.isError || !trip.data) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
-        <EmptyState title="This plan didn't load" body={friendlyError(trip.error)} action="Back" onAction={() => router.back()} />
+        <EmptyState title="This plan didn't load" body={friendlyError(trip.error)} action="Back" onAction={() => leave(router, "/trips")} />
       </View>
     );
   }
@@ -41,7 +42,7 @@ export function TripDetailScreen() {
     <View style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32, paddingHorizontal: citySpace.page }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/trips")} style={styles.back}>
           <Ionicons name="chevron-back" size={24} color={city.ink} />
         </Pressable>
         <CityText size="caption" tone="quiet">

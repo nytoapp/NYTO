@@ -61,9 +61,9 @@ export function TripsScreen() {
         {!restoring && !signedIn ? (
           <EmptyState
             title="Your plans live here"
-            body="Sign in to save evenings, trips, and places you want to come back to."
-            action="Sign in"
-            onAction={() => router.push("/sign-in")}
+            body="Log in to save evenings, trips, and places you want to come back to."
+            action="Log in"
+            onAction={() => router.push({ pathname: "/sign-in", params: { mode: "login" } })}
             secondary={exploreLabel}
             onSecondary={() => router.push(selected ? "/explore" : "/city")}
           />

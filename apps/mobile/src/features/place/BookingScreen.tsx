@@ -2,6 +2,7 @@ import type { DestinationResolveResponse } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,7 +38,7 @@ export function BookingScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 16) }]}>
       <StatusBar style="dark" />
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/")} style={styles.back}>
         <Ionicons name="chevron-back" size={24} color={city.ink} />
       </Pressable>
       <CityText size="display">Continue</CityText>

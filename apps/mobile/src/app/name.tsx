@@ -5,8 +5,9 @@ import { TextInput, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CityText, DarkButton } from "../features/city/chrome";
-import { city, cityRadius, citySpace } from "../features/city/theme";
+import { city, cityRadius, citySpace, color } from "../features/city/theme";
 import { loadAccount, saveDisplayName } from "../features/auth/account";
+import { leave } from "../features/nav/leave";
 import { useOnboarding } from "../features/onboarding/store";
 
 export default function NameScreen() {
@@ -39,7 +40,7 @@ export default function NameScreen() {
       const account = await saveDisplayName(trimmed);
       queryClient.setQueryData(["account"], account);
       if (next === "stay") {
-        router.back();
+        leave(router, "/profile");
         return;
       }
       if (next === "interests" || interests.length === 0) {
@@ -60,7 +61,7 @@ export default function NameScreen() {
       <StatusBar style="dark" />
       <CityText size="display">What should we call you?</CityText>
       <CityText tone="muted" style={{ marginTop: 8 }}>
-        This is the name on your CITYDAY profile.
+        {next === "stay" ? "This is the name on your CITYDAY profile." : "This finishes your account."}
       </CityText>
       <TextInput
         accessibilityLabel="Your name"
@@ -90,7 +91,7 @@ export default function NameScreen() {
         }}
       />
       {error ? (
-        <CityText tone="muted" style={{ marginTop: 12 }}>
+        <CityText style={{ marginTop: 12, color: color.error }}>
           {error}
         </CityText>
       ) : null}

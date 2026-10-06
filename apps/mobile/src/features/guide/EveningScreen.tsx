@@ -1,6 +1,7 @@
 import type { SearchResult, TripDetail } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -64,7 +65,7 @@ export function EveningScreen() {
 
   async function saveEvening(places: SearchResult[]) {
     if (!signedIn) {
-      router.push("/sign-in");
+      router.push({ pathname: "/sign-in", params: { mode: "login" } });
       return;
     }
     if (!selected || !plan) {
@@ -117,7 +118,7 @@ export function EveningScreen() {
     <View style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 28, paddingHorizontal: citySpace.page }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/")} style={styles.back}>
           <Ionicons name="chevron-back" size={24} color={city.ink} />
         </Pressable>
         <CityText size="display">Build my evening</CityText>
@@ -229,7 +230,7 @@ function PlanResult({
               <CompactPlaceCard place={placeCardFromResult(place)} onPress={() => onOpen(place.id)} />
             </View>
           ))}
-          <DarkButton label={saving ? "Saving" : signedIn ? "Save this evening" : "Sign in to save this evening"} disabled={saving} onPress={() => onSave(picks)} />
+          <DarkButton label={saving ? "Saving" : signedIn ? "Save this evening" : "Log in to save this evening"} disabled={saving} onPress={() => onSave(picks)} />
         </>
       ) : null}
       {saveError ? <CityText tone="muted">{saveError}</CityText> : null}

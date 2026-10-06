@@ -89,13 +89,13 @@ export class AuthController {
   @Post("phone/start")
   async startPhone(@Req() request: Request, @Body() body: unknown) {
     const input = parseBody(phoneStartRequestSchema, body);
-    return envelope(request, await this.identity.startPhone(input.phoneE164, request.requestId));
+    return envelope(request, await this.identity.startPhone(input.phoneE164, input.intent, request.requestId));
   }
 
   @Post("phone/verify")
   async verifyPhone(@Req() request: Request, @Body() body: unknown) {
     const input = parseBody(phoneVerifyRequestSchema, body);
-    return envelope(request, await this.identity.verifyPhone(input.phoneE164, input.code, input.device, request.requestId));
+    return envelope(request, await this.identity.verifyPhone(input.phoneE164, input.code, input.device, input.intent, request.requestId));
   }
 
   @Post("email/register")

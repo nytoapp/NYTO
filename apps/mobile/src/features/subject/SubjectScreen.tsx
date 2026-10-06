@@ -3,11 +3,11 @@ import { Linking, Pressable, ScrollView, Text, useWindowDimensions, View } from 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { DestinationResolveResponse, TripDetail } from "@atlas/contracts";
 import { useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../../api/client";
 import { loadSubject } from "./load-subject";
-import { SignInSheet } from "../auth/SignInSheet";
 import { useSession } from "../auth/useSession";
 import { GhostButton, IconButton, PrimaryButton } from "../city/buttons";
 import { EmptyState } from "../city/chrome";
@@ -27,9 +27,7 @@ export function SubjectScreen({ id }: { id: string }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const heroHeight = Math.round(Math.min(width * 0.92, 360));
-  const { signedIn, refresh } = useSession();
-  const [signIn, setSignIn] = useState(false);
-  const [pendingSave, setPendingSave] = useState(false);
+  const { signedIn } = useSession();
   const [actionError, setActionError] = useState<string | null>(null);
   const query = useQuery({
     queryKey: ["subject", id],
@@ -53,7 +51,6 @@ export function SubjectScreen({ id }: { id: string }) {
       return response.data;
     },
     onSuccess: () => {
-      setPendingSave(false);
       void saved.refetch();
     },
   });
@@ -83,8 +80,7 @@ export function SubjectScreen({ id }: { id: string }) {
 
   function onSave() {
     if (!signedIn) {
-      setPendingSave(true);
-      setSignIn(true);
+      router.push({ pathname: "/sign-in", params: { mode: "login" } });
       return;
     }
     if (alreadySaved) {
@@ -105,7 +101,7 @@ export function SubjectScreen({ id }: { id: string }) {
       <View style={{ flex: 1, backgroundColor: color.background }}>
         <Skeleton height={120} round={0} />
         <View style={{ position: "absolute", top: insets.top + space[8], left: space[16] }}>
-          <RoundControl label="Back" icon="chevron-back" onPress={() => router.back()} />
+          <RoundControl label="Back" icon="chevron-back" onPress={() => leave(router, "/")} />
         </View>
         <View style={{ padding: space.page, gap: space[12] }}>
           <TextSkeleton width="40%" />
@@ -120,7 +116,7 @@ export function SubjectScreen({ id }: { id: string }) {
   if (query.isError || !query.data) {
     return (
       <View style={{ flex: 1, backgroundColor: color.background, paddingTop: insets.top, paddingHorizontal: space.page }}>
-        <IconButton label="Back" icon="chevron-back" onPress={() => router.back()} />
+        <IconButton label="Back" icon="chevron-back" onPress={() => leave(router, "/")} />
         <EmptyState title="This didn't load" body={friendlyError(query.error, "Give it another try.")} action="Try again" onAction={() => void query.refetch()} />
       </View>
     );
@@ -149,7 +145,7 @@ export function SubjectScreen({ id }: { id: string }) {
             <CategoryCover label={place.category ?? kindLabel(place.kind)} style={{ width, height: heroHeight }} />
           )}
           <View style={{ position: "absolute", top: insets.top + space[8], left: space[16], right: space[16], flexDirection: "row", justifyContent: "space-between" }}>
-            <RoundControl label="Back" icon="chevron-back" onPress={() => router.back()} />
+            <RoundControl label="Back" icon="chevron-back" onPress={() => leave(router, "/")} />
             <RoundControl label={alreadySaved ? "Saved" : "Save"} icon={alreadySaved ? "heart" : "heart-outline"} tint={alreadySaved ? color.error : color.primaryText} onPress={onSave} />
           </View>
           {place.category || place.kind ? (
@@ -228,15 +224,6 @@ export function SubjectScreen({ id }: { id: string }) {
           {addToPlan.isSuccess ? <Text style={[font.bodySmall, { color: color.secondaryText }]}>Added to the plan.</Text> : null}
         </View>
       </ScrollView>
-      <SignInSheet
-        visible={signIn}
-        onClose={() => setSignIn(false)}
-        onSignedIn={() => {
-          void refresh().then(() => {
-            if (pendingSave) save.mutate();
-          });
-        }}
-      />
     </View>
   );
 }

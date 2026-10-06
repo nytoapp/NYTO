@@ -45,6 +45,7 @@ def nativeShortDirs = [
   "react-native-worklets": "worklets",
   "react-native-nitro-modules": "nitro",
   "react-native-nitro-google-signin": "gsignin",
+  "react-native-nitro-google-number-hint": "nhint",
   "react-native-reanimated": "reanimated",
   "react-native-gesture-handler": "gesture",
   "expo-modules-core": "core",

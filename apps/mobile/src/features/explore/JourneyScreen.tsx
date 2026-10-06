@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { leave } from "../nav/leave";
 import { Pressable, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,7 +29,7 @@ export function JourneyScreen() {
         </Pressable>
         <View style={styles.flex} />
         <DarkButton label="Start my journey" onPress={() => router.replace("/explore")} />
-        <QuietButton label="Maybe later" onPress={() => router.back()} />
+        <QuietButton label="Maybe later" onPress={() => leave(router, "/")} />
       </View>
     </View>
   );
