@@ -1,26 +1,30 @@
+import type { SubjectDetail } from "@atlas/contracts";
+import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CityText, EmptyState } from "../city/chrome";
-import { SubjectResultCard } from "../city/cards";
+import { CityText, DarkButton, EmptyState } from "../city/chrome";
+import { kindLabel } from "../city/format";
+import { CityImage } from "../city/image";
+import { CategoryCover } from "../city/place-card";
 import { ListSkeleton } from "../city/skeleton";
-import { city, citySpace } from "../city/theme";
+import { city, cityRadius, citySpace } from "../city/theme";
 import { useSession } from "../auth/useSession";
 import { useDiscoveryLocation } from "../location/location-store";
 import { loadSubject } from "../subject/load-subject";
 import { loadSaves, readSaveList } from "./save-list";
 
-const tabs = ["Places", "Events", "Activities", "Plans"] as const;
+const tabs = ["All", "Places", "Events", "Activities"] as const;
 
 export function SavedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signedIn, restoring } = useSession();
   const selected = useDiscoveryLocation((state) => state.selected);
-  const [tab, setTab] = useState<(typeof tabs)[number]>("Places");
+  const [tab, setTab] = useState<(typeof tabs)[number]>("All");
   const saves = useQuery({
     queryKey: ["saves"],
     enabled: signedIn,
@@ -37,19 +41,19 @@ export function SavedScreen() {
   const detailsPending = savedItems.length > 0 && detailList.some((query) => query.isPending || query.isLoading);
   const subjects = detailList.flatMap((query) => (query.data ? [query.data] : []));
   const visible = subjects.filter((subject) => {
+    if (tab === "All") return true;
     if (tab === "Events") return subject.kind === "event" || subject.kind === "media";
     if (tab === "Activities") return subject.kind === "activity" || subject.kind === "experience";
-    if (tab === "Plans") return false;
     return subject.kind === "place" || subject.kind === "accommodation";
   });
-  const exploreLabel = selected ? `Explore ${selected.label}` : "Choose a city";
-  const openExplore = () => router.push(selected ? "/explore" : "/city");
+  const exploreLabel = selected ? `Find a place in ${selected.label}` : "Choose a city";
+  const openExplore = () => router.push(selected ? { pathname: "/results", params: { q: "things to do" } } : "/city");
   const loading = restoring || (signedIn && (saves.isLoading || (!saves.isSuccess && !saves.isError) || detailsPending));
   const placesMissing = signedIn && saves.isSuccess && savedItems.length > 0 && subjects.length === 0 && !detailsPending;
   const failed = signedIn && (saves.isError || placesMissing);
-  const empty = signedIn && saves.isSuccess && savedItems.length === 0 && tab !== "Plans" && !loading && !failed;
-  const plansTab = signedIn && tab === "Plans" && !loading && !failed;
-  const filteredEmpty = signedIn && tab !== "Plans" && saves.isSuccess && savedItems.length > 0 && !loading && !failed && visible.length === 0;
+  const empty = signedIn && saves.isSuccess && savedItems.length === 0 && !loading && !failed;
+  const filteredEmpty = signedIn && saves.isSuccess && savedItems.length > 0 && !loading && !failed && visible.length === 0;
+  const countLabel = visible.length === 1 ? "1 place" : `${visible.length} places`;
 
   function retry() {
     void saves.refetch();
@@ -59,11 +63,12 @@ export function SavedScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 32, gap: 12 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
         <View style={styles.pad}>
           <CityText size="display">Saved</CityText>
+          <CityText tone="muted">Places you want to come back to. Saving one does not put it on a day.</CityText>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+        <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
           {tabs.map((item) => {
             const on = tab === item;
             return (
@@ -81,36 +86,132 @@ export function SavedScreen() {
           {failed && !loading ? (
             <EmptyState title="Couldn't load your saves" body="We couldn't retrieve your saved places right now." action="Try again" onAction={retry} />
           ) : null}
-          {plansTab ? <EmptyState title="Plans live with your trips" body="Open Plans to see evenings you have saved." action="Plans" onAction={() => router.push("/(tabs)/trips")} /> : null}
-          {empty ? <EmptyState title="Nothing saved yet" body="Save places and experiences you want to come back to." action={exploreLabel} onAction={openExplore} /> : null}
-          {filteredEmpty ? <CityText tone="muted">Nothing in this list yet.</CityText> : null}
-          {!loading && !failed && tab !== "Plans"
-            ? visible.map((subject) => (
-                <SubjectResultCard
-                  key={subject.id}
-                  item={{
-                    ...subject,
-                    factSource: "catalog",
-                    provider: null,
-                    state: "ok",
-                    distanceMeters: null,
-                    destination: subject.booking?.destinationId && subject.booking.label ? { id: subject.booking.destinationId, label: subject.booking.label } : null,
-                    reasons: [],
-                  }}
-                />
-              ))
+          {empty ? <SavedEmpty label={exploreLabel} onPress={openExplore} /> : null}
+          {filteredEmpty ? (
+            <View style={styles.filtered}>
+              <CityText size="section">Nothing in {tab.toLowerCase()}</CityText>
+              <CityText tone="muted">This filter is empty. The other ones may still have places.</CityText>
+            </View>
+          ) : null}
+          {!loading && !failed && visible.length > 0 ? (
+            <View style={styles.listHead}>
+              <CityText size="meta" tone="quiet">
+                {countLabel}
+              </CityText>
+              <Pressable accessibilityRole="button" accessibilityLabel="Add a place" onPress={openExplore} hitSlop={8}>
+                <CityText size="meta">Add a place</CityText>
+              </Pressable>
+            </View>
+          ) : null}
+          {!loading && !failed
+            ? visible.map((subject) => <SavedRow key={subject.id} subject={subject} onPress={() => router.push(`/subject/${subject.id}`)} />)
             : null}
+          {!loading && !failed && !empty && signedIn ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Add a place" onPress={openExplore} style={styles.add}>
+              <Ionicons name="add" size={18} color={city.ink} />
+              <CityText size="meta">Add a place</CityText>
+            </Pressable>
+          ) : null}
         </View>
       </ScrollView>
     </View>
   );
 }
 
+function SavedEmpty({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <View style={styles.empty}>
+      <View style={styles.emptyMark}>
+        <Ionicons name="bookmark-outline" size={22} color={city.ink} />
+      </View>
+      <CityText size="title">Your list is empty</CityText>
+      <CityText tone="muted">Save a place when you want to come back to it. It stays in this list until you put it on a day.</CityText>
+      <DarkButton label={label} onPress={onPress} />
+    </View>
+  );
+}
+
+function SavedRow({ subject, onPress }: { subject: SubjectDetail; onPress: () => void }) {
+  const image = subject.images[0];
+  const category = (subject.category ?? kindLabel(subject.kind)).toUpperCase();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={subject.title} onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+      <View style={styles.photo}>
+        {image?.url ? (
+          <CityImage uri={image.url} alt={image.alt ?? subject.title} style={styles.photoImage} />
+        ) : (
+          <CategoryCover label={subject.category ?? kindLabel(subject.kind)} seed={subject.title} style={styles.photoImage} />
+        )}
+      </View>
+      <View style={styles.copy}>
+        <CityText size="caption" tone="quiet">
+          {category}
+        </CityText>
+        <CityText size="section" numberOfLines={2}>
+          {subject.title}
+        </CityText>
+        {subject.locality ? (
+          <CityText size="meta" tone="muted" numberOfLines={1}>
+            {subject.locality}
+          </CityText>
+        ) : null}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={city.quiet} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: city.page },
-  pad: { paddingHorizontal: citySpace.page },
-  tabs: { paddingHorizontal: citySpace.page, gap: 8 },
-  tab: { borderRadius: 999, backgroundColor: city.chip, paddingHorizontal: 14, paddingVertical: 8 },
-  tabOn: { backgroundColor: city.ink },
-  list: { paddingHorizontal: citySpace.page, gap: 12 },
+  pad: { paddingHorizontal: citySpace.page, gap: 8 },
+  tabs: { paddingHorizontal: citySpace.page, marginTop: 20, gap: 8 },
+  tab: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: city.paper,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: city.line,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabOn: { backgroundColor: city.ink, borderColor: city.ink },
+  list: { paddingHorizontal: citySpace.page, paddingTop: 18, gap: 12 },
+  listHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  filtered: { gap: 6, paddingVertical: 12 },
+  empty: {
+    marginTop: 8,
+    backgroundColor: city.paper,
+    borderRadius: cityRadius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: city.line,
+    padding: 20,
+    gap: 12,
+  },
+  emptyMark: { width: 44, height: 44, borderRadius: 22, backgroundColor: city.chip, alignItems: "center", justifyContent: "center" },
+  add: {
+    minHeight: 56,
+    borderRadius: cityRadius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: city.line,
+    backgroundColor: city.paper,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: city.paper,
+    borderRadius: cityRadius.card,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: city.line,
+  },
+  pressed: { opacity: 0.92 },
+  photo: { width: 84, height: 84, borderRadius: 14, overflow: "hidden", backgroundColor: city.chip },
+  photoImage: { width: 84, height: 84 },
+  copy: { flex: 1, gap: 2 },
 });

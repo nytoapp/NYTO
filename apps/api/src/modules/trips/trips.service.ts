@@ -18,6 +18,27 @@ export class TripsService {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      const existing = await client.query(
+        `select t.id
+         from trips t
+         where t.owner_user_id = $1
+           and t.destination_location_id = $2
+           and t.starts_on = $3::date
+           and t.ends_on = $4::date
+           and t.deleted_at is null
+         order by t.created_at desc
+         limit 1`,
+        [userId, place.id, input.startsOn, input.endsOn],
+      );
+      const existingId = existing.rows[0]?.id ? String(existing.rows[0].id) : null;
+      if (existingId) {
+        if (input.title) {
+          await client.query("update trips set title = $2 where id = $1 and title is null", [existingId, input.title]);
+        }
+        await client.query("commit");
+        const days = await this.pool.query("select count(*)::int as days from trip_days where trip_id = $1", [existingId]);
+        return { id: existingId, timezone: place.timezone, destinationLabel: place.label, days: Number(days.rows[0]?.days ?? 0) };
+      }
       const trip = await client.query(
         `insert into trips (owner_user_id, destination_location_id, title, starts_on, ends_on, timezone, party_size, status)
          values ($1, $2, $3, $4, $5, $6, $7, 'draft') returning id`,
@@ -48,19 +69,79 @@ export class TripsService {
 
   async list(userId: string) {
     const result = await this.pool.query(
-      `select t.id, t.title, to_char(t.starts_on, 'YYYY-MM-DD') as starts_on, to_char(t.ends_on, 'YYYY-MM-DD') as ends_on, t.timezone, l.label
-       from trips t join resolved_locations l on l.id = t.destination_location_id
-       where t.owner_user_id = $1 and t.deleted_at is null
-       order by t.starts_on`,
+      `with counted as (
+         select t.id, t.title, t.starts_on, t.ends_on, t.timezone, t.created_at, l.label as destination_label,
+                (select count(*)::int from trip_items i where i.trip_id = t.id) as item_count,
+                (timezone(t.timezone, clock_timestamp()))::date as local_today
+         from trips t
+         join resolved_locations l on l.id = t.destination_location_id
+         where t.owner_user_id = $1 and t.deleted_at is null
+       )
+       select id, title, to_char(starts_on, 'YYYY-MM-DD') as starts_on, to_char(ends_on, 'YYYY-MM-DD') as ends_on,
+              timezone, destination_label, item_count,
+              case
+                when ends_on < local_today then 'past'
+                when starts_on > local_today then 'upcoming'
+                else 'current'
+              end as status
+       from counted c
+       where c.item_count > 0
+          or c.id = (
+            select c2.id
+            from counted c2
+            where c2.destination_label = c.destination_label
+              and c2.starts_on = c.starts_on
+              and c2.ends_on = c.ends_on
+              and c2.item_count = 0
+              and not exists (
+                select 1 from counted c3
+                where c3.destination_label = c.destination_label
+                  and c3.starts_on = c.starts_on
+                  and c3.ends_on = c.ends_on
+                  and c3.item_count > 0
+              )
+            order by c2.created_at desc
+            limit 1
+          )
+       order by case when ends_on < local_today then 2 when starts_on > local_today then 1 else 0 end, starts_on desc`,
       [userId],
     );
+    const tripIds = result.rows.map((row) => String(row.id));
+    const stops = new Map<string, { title: string; slot: string }[]>();
+    if (tripIds.length > 0) {
+      const items = await this.pool.query(
+        `select i.trip_id::text as trip_id, i.slot, coalesce(tr.name, 'Untitled') as title
+         from trip_items i
+         join catalog_subjects s on s.id = i.subject_id and s.deleted_at is null
+         left join subject_translations tr on tr.subject_id = s.id and tr.locale = 'en'
+         where i.trip_id = any($1::uuid[])
+         order by case i.slot
+           when 'morning' then 1
+           when 'lunch' then 2
+           when 'afternoon' then 3
+           when 'dinner' then 4
+           when 'night' then 5
+           else 6
+         end, i.position`,
+        [tripIds],
+      );
+      for (const item of items.rows) {
+        const tripId = String(item.trip_id);
+        const list = stops.get(tripId) ?? [];
+        list.push({ title: String(item.title), slot: String(item.slot) });
+        stops.set(tripId, list);
+      }
+    }
     return result.rows.map((row) => ({
       id: String(row.id),
-      title: row.title ? String(row.title) : String(row.label),
+      title: row.title ? String(row.title) : String(row.destination_label),
       startsOn: String(row.starts_on).slice(0, 10),
       endsOn: String(row.ends_on).slice(0, 10),
       timezone: String(row.timezone),
-      destinationLabel: String(row.label),
+      destinationLabel: String(row.destination_label),
+      itemCount: Number(row.item_count ?? 0),
+      status: row.status === "past" || row.status === "upcoming" ? row.status : "current",
+      stops: stops.get(String(row.id)) ?? [],
     }));
   }
 

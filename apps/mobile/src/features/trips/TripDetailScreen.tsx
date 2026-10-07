@@ -2,14 +2,15 @@ import type { TripDetail } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { leave } from "../nav/leave";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../../api/client";
-import { CityText, DarkButton, EmptyState } from "../city/chrome";
-import { city, cityRadius, citySpace } from "../city/theme";
+import { CityText, EmptyState } from "../city/chrome";
+import { city, cityRadius, citySpace, serif } from "../city/theme";
 import { friendlyError } from "../../lib/errors";
+import { civilParts, dayParts } from "./trip-list";
+import { leave } from "../nav/leave";
 
 export function TripDetailScreen() {
   const router = useRouter();
@@ -38,75 +39,106 @@ export function TripDetailScreen() {
   }
 
   const plan = trip.data;
+  const date = civilParts(plan.startsOn);
+  const places = plan.days.flatMap((day) => day.items);
+  const countLabel = places.length === 1 ? "1 place" : `${places.length} places`;
+
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32, paddingHorizontal: citySpace.page }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 48, paddingHorizontal: citySpace.page }} showsVerticalScrollIndicator={false}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/trips")} style={styles.back}>
           <Ionicons name="chevron-back" size={24} color={city.ink} />
         </Pressable>
         <CityText size="caption" tone="quiet">
-          {plan.destinationLabel.toUpperCase()} · {plan.timezone}
+          {plan.destinationLabel.toUpperCase()}
         </CityText>
-        <CityText size="display">{plan.title}</CityText>
-        <CityText tone="muted">
-          {civilDate(plan.startsOn)}
-          {plan.endsOn !== plan.startsOn ? ` – ${civilDate(plan.endsOn)}` : ""}
-        </CityText>
-        {plan.days.length === 0 ? (
-          <View style={styles.day}>
-            <CityText tone="muted">This plan has no days yet.</CityText>
+        <View style={styles.lockup}>
+          <Text allowFontScaling maxFontSizeMultiplier={1.2} style={styles.dayNumber}>
+            {date.day}
+          </Text>
+          <View style={styles.lockupCopy}>
+            <CityText size="section">{date.weekday}</CityText>
+            <CityText tone="muted">{date.month}</CityText>
           </View>
-        ) : null}
-        {plan.days.map((day) => (
-          <View key={day.id} style={styles.day}>
-            <CityText size="section">{civilDate(day.date)}</CityText>
-            {day.items.length === 0 ? (
-              <View style={styles.emptyDay}>
-                <CityText tone="muted">Nothing on this day yet.</CityText>
-                <DarkButton label="Build my evening" onPress={() => router.push("/evening")} />
-                <Pressable accessibilityRole="button" accessibilityLabel="Find a place" onPress={() => router.push({ pathname: "/results", params: { q: "things to do" } })}>
-                  <CityText size="meta" tone="muted">
-                    Find a place
+        </View>
+        <CityText size="meta" tone="quiet">
+          {countLabel}
+          {plan.endsOn !== plan.startsOn ? ` · through ${civilParts(plan.endsOn).day} ${civilParts(plan.endsOn).month}` : ""}
+        </CityText>
+        <View style={styles.parts}>
+          {dayParts.map((part) => {
+            const items = places.filter((item) => (part.slots as readonly string[]).includes(item.slot));
+            return (
+              <View key={part.id} style={styles.part}>
+                <View style={styles.partHead}>
+                  <CityText size="section">{part.label}</CityText>
+                  <CityText size="meta" tone="quiet">
+                    {items.length === 0 ? part.hint : items.length === 1 ? "1 place" : `${items.length} places`}
                   </CityText>
+                </View>
+                {items.map((item, index) => (
+                  <Pressable
+                    key={item.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title}
+                    onPress={() => router.push(`/subject/${item.subjectId}`)}
+                    style={[styles.item, index > 0 && styles.itemRule]}
+                  >
+                    <Text allowFontScaling maxFontSizeMultiplier={1.2} style={styles.index}>
+                      {index + 1}
+                    </Text>
+                    <View style={styles.itemCopy}>
+                      <CityText size="section" numberOfLines={2}>
+                        {item.title}
+                      </CityText>
+                      {item.localTime ? (
+                        <CityText size="meta" tone="quiet">
+                          {item.localTime}
+                        </CityText>
+                      ) : null}
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={city.quiet} />
+                  </Pressable>
+                ))}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add a ${part.label.toLowerCase()} place`}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/results",
+                      params: { q: part.query, plan: plan.id, slot: part.slot },
+                    })
+                  }
+                  style={[styles.add, items.length > 0 && styles.itemRule]}
+                >
+                  <View style={styles.plus}>
+                    <Ionicons name="add" size={16} color={city.ink} />
+                  </View>
+                  <CityText size="meta">Add a place</CityText>
                 </Pressable>
               </View>
-            ) : null}
-            {day.items.map((item) => (
-              <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.title} onPress={() => router.push(`/subject/${item.subjectId}`)} style={styles.item}>
-                <CityText size="meta" tone="quiet">
-                  {item.notes ?? item.localTime ?? slotLabel[item.slot]}
-                </CityText>
-                <CityText size="section">{item.title}</CityText>
-              </Pressable>
-            ))}
-          </View>
-        ))}
+            );
+          })}
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-const slotLabel = {
-  morning: "Morning",
-  lunch: "Lunch",
-  afternoon: "Afternoon",
-  dinner: "Dinner",
-  night: "Evening",
-  unscheduled: "Anytime",
-} as const;
-
-function civilDate(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  if (!match) return value;
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  return new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(date);
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: city.page },
-  back: { width: 44, height: 44, justifyContent: "center" },
-  day: { marginTop: 22, gap: 8 },
-  emptyDay: { gap: 12, marginTop: 8 },
-  item: { backgroundColor: city.paper, borderRadius: cityRadius.card, padding: 14, gap: 2, borderWidth: StyleSheet.hairlineWidth, borderColor: city.line },
+  back: { width: 44, height: 44, justifyContent: "center", marginLeft: -8 },
+  lockup: { flexDirection: "row", alignItems: "flex-end", gap: 12, marginTop: 8 },
+  dayNumber: { fontFamily: serif, fontSize: 56, lineHeight: 60, color: city.ink, fontWeight: "500" },
+  lockupCopy: { paddingBottom: 8, gap: 0 },
+  parts: { marginTop: 28, gap: 16 },
+  part: { backgroundColor: city.paper, borderRadius: cityRadius.card, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: city.line },
+  partHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 },
+  item: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
+  index: { width: 22, fontFamily: serif, fontSize: 16, lineHeight: 20, color: city.quiet },
+  itemRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: city.line },
+  itemCopy: { flex: 1, gap: 2 },
+  add: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: 10 },
+  plus: { width: 28, height: 28, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: city.line, alignItems: "center", justifyContent: "center" },
 });
