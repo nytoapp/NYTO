@@ -23,7 +23,7 @@ import { useSearch } from "./useSearch";
 export function ResultsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ q?: string }>();
+  const params = useLocalSearchParams<{ q?: string; plan?: string; slot?: string }>();
   const initial = typeof params.q === "string" ? params.q : "";
   const [query, setQuery] = useState(initial);
   const [draft, setDraft] = useState(initial);
@@ -169,7 +169,19 @@ export function ResultsScreen() {
                 place={placeCardFromResult(item)}
                 saved={savedIds.has(item.id)}
                 onSave={isCatalogId(item.id) ? () => void saveSubject(item.id) : undefined}
-                onPress={isCatalogId(item.id) ? () => router.push(`/subject/${item.id}`) : undefined}
+                onPress={
+                  isCatalogId(item.id)
+                    ? () =>
+                        router.push({
+                          pathname: "/subject/[id]",
+                          params: {
+                            id: item.id,
+                            ...(typeof params.plan === "string" ? { plan: params.plan } : {}),
+                            ...(typeof params.slot === "string" ? { slot: params.slot } : {}),
+                          },
+                        })
+                    : undefined
+                }
               />
             ))
           : null}

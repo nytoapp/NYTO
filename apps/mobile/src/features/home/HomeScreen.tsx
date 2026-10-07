@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Image, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -10,8 +11,11 @@ import { LargePlaceCard, placeCardFromResult } from "../city/place-card";
 import { SearchBar } from "../city/search-bar";
 import { CardSkeleton } from "../city/skeleton";
 import { color, font, fontScaleCap, space } from "../city/theme";
+import { apiRequest } from "../../api/client";
 import { friendlyError } from "../../lib/errors";
+import { useSession } from "../auth/useSession";
 import { useDiscoveryLocation } from "../location/location-store";
+import { loadSaves, readSaveList } from "../saved/save-list";
 import { useHome } from "./useHome";
 
 function greeting(hour: number): string {
@@ -27,7 +31,21 @@ export function HomeScreen() {
   const cardWidth = Math.min(280, Math.round(width * 0.74));
   const selected = useDiscoveryLocation((state) => state.selected);
   const hydrated = useDiscoveryLocation((state) => state.hydrated);
+  const { signedIn } = useSession();
   const home = useHome();
+  const saves = useQuery({ queryKey: ["saves"], enabled: signedIn, queryFn: loadSaves });
+  const savedIds = new Set(readSaveList(saves.data).map((item) => item.subjectId));
+
+  async function toggleSave(subjectId: string) {
+    if (!signedIn) {
+      router.push({ pathname: "/sign-in", params: { mode: "login" } });
+      return;
+    }
+    const response = savedIds.has(subjectId)
+      ? await apiRequest(`/api/v1/saves/${subjectId}`, { method: "DELETE" })
+      : await apiRequest("/api/v1/saves", { method: "POST", body: JSON.stringify({ subjectId }) });
+    if (!response.error) void saves.refetch();
+  }
   const zone = home.data?.timezone ?? selected?.timezone ?? null;
   const hour = localHour(zone);
   const place = home.data?.locationLabel ?? selected?.label ?? null;
@@ -109,6 +127,8 @@ export function HomeScreen() {
                   <View key={item.id} style={{ width: cardWidth }}>
                     <LargePlaceCard
                       place={placeCardFromResult(item)}
+                      saved={savedIds.has(item.id)}
+                      onSave={isCatalogId(item.id) ? () => void toggleSave(item.id) : undefined}
                       onPress={isCatalogId(item.id) ? () => router.push(`/subject/${item.id}`) : undefined}
                     />
                   </View>

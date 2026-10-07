@@ -1,16 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { apiRequest } from "../../api/client";
-import { CityText, DarkButton, EmptyState } from "../city/chrome";
+import { CityText, EmptyState } from "../city/chrome";
 import { ListSkeleton } from "../city/skeleton";
-import { city, cityRadius, citySpace } from "../city/theme";
+import { city, cityRadius, citySpace, serif } from "../city/theme";
 import { useSession } from "../auth/useSession";
 import { useDiscoveryLocation } from "../location/location-store";
-import { loadTrips, readTripList } from "./trip-list";
+import { civilDateInZone, civilParts, dayParts, loadTrips, readTripList, stopsForPart, type TripRow } from "./trip-list";
 
 export function TripsScreen() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export function TripsScreen() {
   const { signedIn, restoring } = useSession();
   const selected = useDiscoveryLocation((state) => state.selected);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
   const trips = useQuery({
     queryKey: ["trips"],
     enabled: signedIn,
@@ -25,23 +27,32 @@ export function TripsScreen() {
   });
   const plans = readTripList(trips.data);
   const exploreLabel = selected ? `Explore ${selected.label}` : "Choose a city";
-  const startLabel = selected ? `Start a plan in ${selected.label}` : "Choose a city";
+  const todayPlan = selected ? plans.find((trip) => trip.status === "current" && trip.destinationLabel === selected.label) : undefined;
+  const startLabel = !selected ? "Choose a city" : todayPlan ? "Open today's plan" : `Start today in ${selected.label}`;
   const loading = restoring || (signedIn && (trips.isLoading || (!trips.isSuccess && !trips.isError)));
   const failed = signedIn && trips.isError;
   const empty = signedIn && trips.isSuccess && plans.length === 0 && !loading;
   const loaded = signedIn && trips.isSuccess && plans.length > 0 && !loading && !failed;
+  const comingDays = comingDaySlots(plans, selected?.timezone, selected?.label);
 
-  async function createPlan() {
+  async function openDay(iso: string) {
     if (!selected) {
       router.push("/city");
       return;
     }
+    if (opening) return;
+    const existing = plans.find((trip) => trip.startsOn.startsWith(iso) && trip.destinationLabel === selected.label);
+    if (existing) {
+      router.push(`/trip/${existing.id}`);
+      return;
+    }
+    setOpening(iso);
     setCreateError(null);
-    const day = new Intl.DateTimeFormat("en-CA", { timeZone: selected.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
     const response = await apiRequest<{ id: string }>("/api/v1/trips", {
       method: "POST",
-      body: JSON.stringify({ destinationLocationId: selected.id, startsOn: day, endsOn: day, title: `A day in ${selected.label}` }),
+      body: JSON.stringify({ destinationLocationId: selected.id, startsOn: iso, endsOn: iso, title: `A day in ${selected.label}` }),
     });
+    setOpening(null);
     if (response.error || !response.data?.id) {
       setCreateError(response.error?.message ?? "The plan could not be started.");
       return;
@@ -53,15 +64,15 @@ export function TripsScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 32 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
         <View style={styles.pad}>
           <CityText size="display">Plans</CityText>
-          <CityText tone="muted">Evenings and trips saved to your account.</CityText>
+          <CityText tone="muted">One day in a city. Today, or a day you are still looking forward to.</CityText>
         </View>
         {!restoring && !signedIn ? (
           <EmptyState
             title="Your plans live here"
-            body="Log in to save evenings, trips, and places you want to come back to."
+            body="Log in to keep the days you are putting together."
             action="Log in"
             onAction={() => router.push({ pathname: "/sign-in", params: { mode: "login" } })}
             secondary={exploreLabel}
@@ -76,27 +87,48 @@ export function TripsScreen() {
         {failed && !loading ? (
           <EmptyState title="Couldn't load your plans" body="We couldn't retrieve your plans right now." action="Try again" onAction={() => void trips.refetch()} />
         ) : null}
-        {empty ? <EmptyState title="No plans yet" body="When you start an evening or a trip, it will show up here." action={startLabel} onAction={() => void createPlan()} /> : null}
-        {loaded
-          ? plans.map((trip) => (
-              <Pressable key={trip.id} accessibilityRole="button" accessibilityLabel={trip.title} onPress={() => router.push(`/trip/${trip.id}`)} style={styles.card}>
-                <CityText size="caption" tone="quiet">
-                  {formatPlanDate(trip.startsOn)}
-                  {trip.endsOn !== trip.startsOn ? ` – ${formatPlanDate(trip.endsOn)}` : ""}
-                </CityText>
-                <CityText size="title">{trip.title}</CityText>
-                <CityText tone="muted">{trip.destinationLabel}</CityText>
-              </Pressable>
-            ))
-          : null}
+        {empty ? <EmptyState title="No plans yet" body="Start with today. The next few days are under it, when you want them." action={startLabel} onAction={() => void openDay(selected ? civilDateInZone(selected.timezone, 0) : "")} /> : null}
+        {loaded ? (
+          <>
+            <DayGroup title="Today" trips={plans.filter((trip) => trip.status === "current")} onOpen={(id) => router.push(`/trip/${id}`)} />
+            <DayGroup title="Coming up" trips={plans.filter((trip) => trip.status === "upcoming" && trip.itemCount > 0)} onOpen={(id) => router.push(`/trip/${id}`)} />
+            <DayGroup title="Earlier" trips={plans.filter((trip) => trip.status === "past" && trip.itemCount > 0)} onOpen={(id) => router.push(`/trip/${id}`)} />
+          </>
+        ) : null}
+        {signedIn && selected && !loading && !failed && comingDays.length > 0 ? (
+          <View style={styles.later}>
+            <CityText size="section">Coming days</CityText>
+            <CityText tone="muted">Tap a day to put places on it.</CityText>
+            {comingDays.map((day) => {
+              const date = civilParts(day.iso);
+              return (
+                <Pressable
+                  key={day.iso}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${date.weekday} ${date.day} ${date.month}`}
+                  disabled={opening !== null}
+                  onPress={() => (day.tripId ? router.push(`/trip/${day.tripId}`) : void openDay(day.iso))}
+                  style={styles.laterRow}
+                >
+                  <Text allowFontScaling maxFontSizeMultiplier={1.2} style={styles.laterDay}>
+                    {date.day}
+                  </Text>
+                  <View style={styles.laterCopy}>
+                    <CityText size="section">{date.weekday}</CityText>
+                    <CityText size="meta" tone="muted">
+                      {date.month}
+                      {opening === day.iso ? " · Starting" : ""}
+                    </CityText>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={city.quiet} />
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
         {createError ? (
           <View style={styles.pad}>
             <CityText tone="muted">{createError}</CityText>
-          </View>
-        ) : null}
-        {loaded && selected ? (
-          <View style={styles.pad}>
-            <DarkButton label={startLabel} onPress={() => void createPlan()} />
           </View>
         ) : null}
       </ScrollView>
@@ -104,15 +136,147 @@ export function TripsScreen() {
   );
 }
 
-function formatPlanDate(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  if (!match) return value;
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  return new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(date);
+function comingDaySlots(plans: TripRow[], timezone: string | undefined, label: string | undefined): { iso: string; tripId?: string }[] {
+  if (!timezone || !label) return [];
+  const slots = new Map<string, string | undefined>();
+  for (let offset = 1; offset <= 6; offset += 1) slots.set(civilDateInZone(timezone, offset), undefined);
+  for (const trip of plans) {
+    if (trip.destinationLabel !== label || trip.status !== "upcoming") continue;
+    const iso = trip.startsOn.slice(0, 10);
+    if (trip.itemCount > 0) slots.delete(iso);
+    else slots.set(iso, trip.id);
+  }
+  return [...slots.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([iso, tripId]) => ({ iso, tripId }));
+}
+
+function DayGroup({ title, trips, onOpen }: { title: string; trips: TripRow[]; onOpen: (id: string) => void }) {
+  if (trips.length === 0) return null;
+  return (
+    <View>
+      <View style={styles.pad}>
+        <CityText size="section">{title}</CityText>
+      </View>
+      {trips.map((trip) =>
+        trip.itemCount > 0 ? <DayCard key={trip.id} trip={trip} onPress={() => onOpen(trip.id)} /> : <QuietDay key={trip.id} trip={trip} onPress={() => onOpen(trip.id)} />,
+      )}
+    </View>
+  );
+}
+
+function DayCard({ trip, onPress }: { trip: TripRow; onPress: () => void }) {
+  const date = civilParts(trip.startsOn);
+  const count = trip.itemCount;
+  const filled = dayParts
+    .map((part) => ({ part, names: stopsForPart(trip.stops, part.id) }))
+    .filter((entry) => entry.names.length > 0);
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${trip.destinationLabel}, ${date.weekday} ${date.day} ${date.month}`} onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+      <View style={styles.cardHead}>
+        <View style={styles.lockup}>
+          <Text allowFontScaling maxFontSizeMultiplier={1.2} style={styles.dayNumber}>
+            {date.day}
+          </Text>
+          <View style={styles.lockupCopy}>
+            <CityText size="meta">{date.weekday}</CityText>
+            <CityText size="meta" tone="muted">
+              {date.month}
+            </CityText>
+          </View>
+        </View>
+        <View style={styles.cardMeta}>
+          <CityText size="meta">{trip.destinationLabel}</CityText>
+          <CityText size="meta" tone="quiet">
+            {count === 1 ? "1 place" : `${count} places`}
+          </CityText>
+        </View>
+      </View>
+      <View style={styles.rule} />
+      <View style={styles.parts}>
+        {filled.map(({ part, names }) => {
+          const shown = names.slice(0, 3);
+          const rest = names.length - shown.length;
+          return (
+            <View key={part.id} style={styles.part}>
+              <CityText size="meta" tone="quiet">
+                {part.label}
+              </CityText>
+              {shown.map((name, index) => (
+                <CityText key={`${part.id}-${index}`} numberOfLines={1}>
+                  {name}
+                </CityText>
+              ))}
+              {rest > 0 ? (
+                <CityText size="meta" tone="quiet">
+                  +{rest} more
+                </CityText>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    </Pressable>
+  );
+}
+
+function QuietDay({ trip, onPress }: { trip: TripRow; onPress: () => void }) {
+  const date = civilParts(trip.startsOn);
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${trip.destinationLabel}, ${date.weekday} ${date.day} ${date.month}`} onPress={onPress} style={({ pressed }) => [styles.quiet, pressed && styles.pressed]}>
+      <Text allowFontScaling maxFontSizeMultiplier={1.2} style={styles.quietDay}>
+        {date.day}
+      </Text>
+      <View style={styles.laterCopy}>
+        <CityText size="section">{date.weekday}</CityText>
+        <CityText size="meta" tone="muted">
+          {date.month} · {trip.destinationLabel}
+        </CityText>
+      </View>
+      <CityText size="meta" tone="quiet">
+        Add places
+      </CityText>
+    </Pressable>
+  );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: city.page },
-  pad: { paddingHorizontal: citySpace.page, gap: 8, marginBottom: 12 },
-  card: { marginHorizontal: citySpace.page, marginTop: 12, backgroundColor: city.paper, borderRadius: cityRadius.card, padding: 16, gap: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: city.line },
+  pad: { paddingHorizontal: citySpace.page, gap: 8, marginBottom: 16 },
+  card: {
+    marginHorizontal: citySpace.page,
+    marginBottom: 14,
+    backgroundColor: city.paper,
+    borderRadius: cityRadius.card,
+    padding: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: city.line,
+  },
+  pressed: { opacity: 0.92 },
+  cardHead: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12 },
+  lockup: { flexDirection: "row", alignItems: "flex-end", gap: 10 },
+  dayNumber: { fontFamily: serif, fontSize: 40, lineHeight: 44, color: city.ink, fontWeight: "500" },
+  lockupCopy: { paddingBottom: 4 },
+  cardMeta: { alignItems: "flex-end", paddingBottom: 4, gap: 2 },
+  rule: { height: StyleSheet.hairlineWidth, backgroundColor: city.line, marginVertical: 14 },
+  parts: { gap: 14 },
+  part: { gap: 2 },
+  quiet: {
+    marginHorizontal: citySpace.page,
+    marginBottom: 14,
+    minHeight: 72,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: city.paper,
+    borderRadius: cityRadius.card,
+    paddingHorizontal: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: city.line,
+  },
+  quietDay: { width: 36, fontFamily: serif, fontSize: 28, lineHeight: 32, color: city.ink },
+  later: { paddingHorizontal: citySpace.page, gap: 4, marginTop: 8 },
+  laterRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: city.line },
+  laterDay: { width: 36, fontFamily: serif, fontSize: 22, lineHeight: 26, color: city.ink },
+  laterCopy: { flex: 1, gap: 1 },
 });
