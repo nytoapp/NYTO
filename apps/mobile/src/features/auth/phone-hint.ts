@@ -1,17 +1,29 @@
-import { Platform } from "react-native";
+import { loadNitroModule } from "./nitro";
 
-export async function pickDevicePhone(): Promise<{ dial: string; national: string } | null> {
-  if (Platform.OS !== "android") return null;
+export type DevicePhone =
+  | { kind: "selected"; dial: string; national: string }
+  | { kind: "cancelled" }
+  | { kind: "unavailable" };
+
+export async function pickDevicePhone(): Promise<DevicePhone> {
+  const hint = await loadNitroModule(() => import("react-native-nitro-google-number-hint"));
+  if (!hint) return { kind: "unavailable" };
   try {
-    const hint = await import("react-native-nitro-google-number-hint");
-    if (!hint.isPhoneNumberHintAvailable()) return null;
-    const parts = await hint.getParsedPhoneNumberHint();
-    if (!parts?.countryCallingCode || !parts.nationalNumber) return null;
+    if (!hint.isPhoneNumberHintAvailable()) return { kind: "unavailable" };
+    const result = await hint.requestPhoneNumberHint();
+    if (result.status !== "selected") console.warn("[CITYDAY] phone hint", result.status);
+    if (result.status !== "selected" || !result.phoneNumber) {
+      return result.status === "cancelled" ? { kind: "cancelled" } : { kind: "unavailable" };
+    }
+    const parts = hint.parsePhoneNumber(result.phoneNumber);
+    if (!parts?.countryCallingCode || !parts.nationalNumber) return { kind: "unavailable" };
     return {
+      kind: "selected",
       dial: parts.countryCallingCode.replace(/\D/g, ""),
       national: parts.nationalNumber.replace(/\D/g, ""),
     };
-  } catch {
-    return null;
+  } catch (error) {
+    console.warn("[CITYDAY] Phone number hint did not open.", error instanceof Error ? error.message : "unknown");
+    return { kind: "unavailable" };
   }
 }

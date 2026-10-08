@@ -318,6 +318,26 @@ export const refreshRequestSchema = z
   })
   .strict();
 
+export const interestIds = ["food", "music", "culture", "outdoors", "shopping", "nightlife", "activities", "wellness", "surprise"] as const;
+
+export const accountSchema = z
+  .object({
+    displayName: z.string().nullable(),
+    phoneE164: z.string().nullable(),
+    email: z.string().nullable(),
+    interestIds: z.array(z.enum(interestIds)),
+  })
+  .strict();
+
+export type Account = z.infer<typeof accountSchema>;
+
+export const accountPatchSchema = z
+  .object({
+    displayName: z.string().min(1).max(40).optional(),
+    interestIds: z.array(z.enum(interestIds)).max(interestIds.length).optional(),
+  })
+  .strict();
+
 export const authSessionSchema = z
   .object({
     accessToken: z.string(),

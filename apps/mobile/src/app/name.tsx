@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { TextInput, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -58,6 +58,15 @@ export default function NameScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: city.page, paddingTop: insets.top + 28, paddingHorizontal: citySpace.page, paddingBottom: insets.bottom + 24 }}>
+      <Stack.Screen
+        options={{
+          animation: "slide_from_right",
+          contentStyle: { backgroundColor: city.page },
+          statusBarStyle: "dark",
+          statusBarTranslucent: true,
+          navigationBarColor: city.page,
+        }}
+      />
       <StatusBar style="dark" />
       <CityText size="display">What should we call you?</CityText>
       <CityText tone="muted" style={{ marginTop: 8 }}>

@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { saveInterests } from "../auth/account";
+import { useSession } from "../auth/useSession";
 import { IconButton, PrimaryButton } from "../city/buttons";
 import { color, font, fontScaleCap, motion, radius, space } from "../city/theme";
 import { revealApp } from "../landing/reveal";
@@ -17,8 +20,13 @@ const gap = space[12];
 export function InterestsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const editing = params.mode === "edit";
+  const { signedIn } = useSession();
   const { width } = useWindowDimensions();
   const stored = useOnboarding((state) => state.interests);
+  const setInterests = useOnboarding((state) => state.setInterests);
   const enterApp = useOnboarding((state) => state.enterApp);
   const stage = useOnboarding((state) => state.stage);
   const setStage = useOnboarding((state) => state.setStage);
@@ -38,7 +46,7 @@ export function InterestsScreen() {
     setError(null);
     setSelected((current) => {
       const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-      useOnboarding.setState({ interests: next });
+      if (!editing) useOnboarding.setState({ interests: next });
       return next;
     });
   }
@@ -48,16 +56,21 @@ export function InterestsScreen() {
     savingRef.current = true;
     setSaving(true);
     setError(null);
-    void enterApp(ids)
-      .then(() => router.replace("/"))
-      .catch(() => {
-        savingRef.current = false;
-        setSaving(false);
-        setError("Your choices could not be saved. Try again.");
-      });
+    const done = editing
+      ? (signedIn ? saveInterests(ids).then((account) => queryClient.setQueryData(["account"], account)) : Promise.resolve()).then(() => setInterests(ids)).then(() => leave(router, "/profile"))
+      : enterApp(ids).then(() => router.replace("/"));
+    void done.catch(() => {
+      savingRef.current = false;
+      setSaving(false);
+      setError("Your choices could not be saved. Try again.");
+    });
   }
 
   function back() {
+    if (editing) {
+      leave(router, "/profile");
+      return;
+    }
     if (stage === "app") {
       leave(router, "/");
       return;
@@ -75,21 +88,29 @@ export function InterestsScreen() {
         <Animated.View style={{ opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }}>
           <View style={styles.top}>
             <IconButton label="Back" icon="chevron-back" onPress={back} />
-            <View accessibilityRole="progressbar" accessibilityLabel="Step 2 of 2" style={styles.progress}>
-              <View style={[styles.segment, styles.segmentOn]} />
-              <View style={[styles.segment, styles.segmentCurrent]} />
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Skip" onPress={() => finish([])} style={styles.skipHit}>
-              <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.label, styles.skip]}>
-                Skip
-              </Text>
-            </Pressable>
+            {editing ? (
+              <View style={styles.progress} />
+            ) : (
+              <View accessibilityRole="progressbar" accessibilityLabel="Step 2 of 2" style={styles.progress}>
+                <View style={[styles.segment, styles.segmentOn]} />
+                <View style={[styles.segment, styles.segmentCurrent]} />
+              </View>
+            )}
+            {editing ? (
+              <View style={styles.skipHit} />
+            ) : (
+              <Pressable accessibilityRole="button" accessibilityLabel="Skip" onPress={() => finish([])} style={styles.skipHit}>
+                <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.label, styles.skip]}>
+                  Skip
+                </Text>
+              </Pressable>
+            )}
           </View>
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} accessibilityRole="header" style={[font.display, styles.heading]}>
-            What are you in the mood for?
+            {editing ? "Your interests" : "What are you in the mood for?"}
           </Text>
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, styles.support]}>
-            Choose a few things you enjoy. This is optional.
+            {editing ? (signedIn ? "These stay with your CITYDAY account." : "These stay on this phone until you have an account.") : "Choose a few things you enjoy. This is optional."}
           </Text>
           <View style={styles.grid}>
             {interests.map((item) => {
@@ -131,7 +152,7 @@ export function InterestsScreen() {
             {error}
           </Text>
         ) : null}
-        <PrimaryButton label={saving ? "Saving" : "Continue"} onPress={() => finish(selected)} disabled={saving} />
+        <PrimaryButton label={saving ? "Saving" : editing ? "Save" : "Continue"} onPress={() => finish(selected)} disabled={saving} />
       </View>
     </View>
   );

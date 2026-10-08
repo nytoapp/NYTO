@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { apiRequest, readAccessToken, writeAccessToken } from "../../api/client";
+import { clearSignInDraft } from "./sign-in-draft";
 import { useOnboarding, type Stage } from "../onboarding/store";
 
 const STAGE_KEY = "cityday.stage";
@@ -68,7 +69,7 @@ export const useAuth = create<AuthState>((set) => ({
       // Local sign-out still has to finish if the network is down.
     }
     await writeAccessToken(null);
-    await Promise.all([SecureStore.setItemAsync(STAGE_KEY, "welcome"), SecureStore.setItemAsync(INTERESTS_KEY, "[]")]);
+    await Promise.all([SecureStore.setItemAsync(STAGE_KEY, "welcome"), SecureStore.setItemAsync(INTERESTS_KEY, "[]"), clearSignInDraft()]);
     useOnboarding.setState({ stage: "welcome", interests: [] });
     set({ status: "signedOut" });
   },
