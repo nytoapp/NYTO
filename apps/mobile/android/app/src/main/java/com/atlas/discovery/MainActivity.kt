@@ -1,6 +1,7 @@
 package com.atlas.discovery
 import expo.modules.splashscreen.SplashScreenManager
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
@@ -27,6 +28,21 @@ class MainActivity : ReactActivity() {
    * Returns the name of the main component registered from JavaScript. This is used to schedule
    * rendering of the component.
    */
+  /**
+   * The dev client launches with exp+atlas://expo-development-client/?url=...
+   * A phone-number sheet on a single-task activity redelivers that URL, and the
+   * dev client reloads the bundle. The login screen is then gone. Ignore that
+   * relaunch while this activity is already open. A real atlas:// link still goes through.
+   */
+  override fun onNewIntent(intent: Intent) {
+    val data = intent.dataString.orEmpty()
+    if (data.contains("expo-development-client")) {
+      setIntent(intent)
+      return
+    }
+    super.onNewIntent(intent)
+  }
+
   override fun getMainComponentName(): String = "main"
 
   /**

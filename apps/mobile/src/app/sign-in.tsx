@@ -19,6 +19,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useMutation } from "@tanstack/react-query";
 import { getLocales } from "expo-localization";
+import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest, writeSession } from "../api/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -27,6 +28,7 @@ import { pickDevicePhone } from "../features/auth/phone-hint";
 import { countryFlag, matchCountries, nationalNumber, phoneCountries, phoneReady, suggestPhoneCountry, type PhoneCountry } from "../features/auth/countries";
 import { signInWithGoogle } from "../features/auth/google";
 import { useAuth } from "../features/auth/session";
+import { clearSignInDraft, saveSignInDraft, useSignInDraft } from "../features/auth/sign-in-draft";
 import { useOnboarding } from "../features/onboarding/store";
 import { leave } from "../features/nav/leave";
 import { friendlyError } from "../lib/errors";
@@ -72,12 +74,6 @@ function digitsFor(country: PhoneCountry, input: string): string {
 
 function spokenNumber(country: PhoneCountry, national: string): string {
   return `+${country.dial} ${national}`.trim();
-}
-
-function countryForDial(dial: string, current: PhoneCountry | null): PhoneCountry | null {
-  const matches = phoneCountries.filter((item) => item.dial === dial);
-  if (matches.length === 0) return null;
-  return matches.find((item) => item.iso === current?.iso) ?? matches[0] ?? null;
 }
 
 function CodeBoxes({ value, onChange }: { value: string; onChange: (next: string) => void }) {
@@ -138,6 +134,7 @@ type AccountMode = "create" | "login";
 
 export default function SignInScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ mode?: string }>();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
@@ -147,13 +144,18 @@ export default function SignInScreen() {
   const stage = useOnboarding((state) => state.stage);
   const interests = useOnboarding((state) => state.interests);
   const markSignedIn = useAuth((state) => state.markSignedIn);
-  const [mode, setMode] = useState<AccountMode>(params.mode === "create" ? "create" : "login");
+  const [mode, setMode] = useState<AccountMode>(params.mode === "create" ? "create" : params.mode === "login" ? "login" : useSignInDraft.getState().draft?.mode ?? "login");
   const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
   const [step, setStep] = useState<Step>("phone");
-  const [country, setCountry] = useState<PhoneCountry | null>(() => suggestPhoneCountry(getLocales()[0]?.regionCode));
+  const [country, setCountry] = useState<PhoneCountry | null>(() => {
+    const iso = useSignInDraft.getState().draft?.countryIso;
+    return phoneCountries.find((item) => item.iso === iso) ?? suggestPhoneCountry(getLocales()[0]?.regionCode);
+  });
+  const countryRef = useRef(country);
+  countryRef.current = country;
   const [picking, setPicking] = useState(false);
   const [countryQuery, setCountryQuery] = useState("");
-  const [national, setNational] = useState("");
+  const [national, setNational] = useState(() => useSignInDraft.getState().draft?.national ?? "");
   const [focused, setFocused] = useState(false);
   const [fieldNote, setFieldNote] = useState<string | null>(null);
   const [code, setCode] = useState("");
@@ -162,10 +164,15 @@ export default function SignInScreen() {
   const sentCode = useRef("");
   const phoneLock = useRef(false);
   const hinted = useRef(false);
+  const hinting = useRef(false);
   const providerLock = useRef(false);
   const enter = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const ready = country ? phoneReady(country, national) : false;
   const phoneE164 = country ? `+${country.dial}${national}` : "";
+
+  useEffect(() => {
+    void saveSignInDraft({ mode, countryIso: country?.iso ?? null, national, hinting: hinting.current });
+  }, [country, mode, national]);
 
   useEffect(() => {
     if (reduced) {
@@ -182,6 +189,7 @@ export default function SignInScreen() {
   }, [seconds]);
 
   async function finish() {
+    await clearSignInDraft();
     markSignedIn();
     let needsName = true;
     try {
@@ -233,7 +241,7 @@ export default function SignInScreen() {
         method: "POST",
         body: JSON.stringify({ phoneE164, code, device: device(), intent: mode }),
       });
-      if (response.error || !response.data) throw new Error(response.error?.message ?? "That code is not valid.");
+      if (response.error || !response.data) throw new Error(response.error?.message ?? t("signIn.badCode"));
       await writeSession(response.data);
     },
     onSuccess: () => {
@@ -260,15 +268,27 @@ export default function SignInScreen() {
   }, [code, step, verify]);
 
   async function offerDeviceNumber() {
-    if (hinted.current) return;
-    hinted.current = true;
-    const picked = await pickDevicePhone();
-    if (!picked) return;
-    const nextCountry = countryForDial(picked.dial, country);
-    if (!nextCountry) return;
-    setCountry(nextCountry);
-    setNational(nationalNumber(picked.national, nextCountry.max));
-    setFieldNote(null);
+    if (hinted.current || hinting.current) return;
+    hinting.current = true;
+    try {
+      await saveSignInDraft({ mode, countryIso: countryRef.current?.iso ?? null, national, hinting: true });
+      // Let a closing country sheet finish. The hint needs the login screen in front.
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const picked = await pickDevicePhone();
+      if (picked.kind === "unavailable") return;
+      hinted.current = true;
+      if (picked.kind !== "selected") return;
+      const chosen = countryRef.current;
+      if (!chosen) return;
+      setNational(nationalNumber(picked.national, chosen.max));
+      setFieldNote(null);
+    } catch (error) {
+      console.warn("[CITYDAY] Phone number hint did not open.", error instanceof Error ? error.message : "unknown");
+    } finally {
+      hinting.current = false;
+      const current = useSignInDraft.getState().draft;
+      if (current?.hinting) void saveSignInDraft({ ...current, hinting: false });
+    }
   }
 
   function requestCode() {
@@ -291,12 +311,12 @@ export default function SignInScreen() {
         body: JSON.stringify({ idToken: result.idToken, nonce: result.nonce, device: device() }),
       });
       if (response.error || !response.data) {
-        throw new Error(response.error?.message ?? "Google sign-in didn't go through. Try again.");
+        throw new Error(response.error?.message ?? t("signIn.googleFailed"));
       }
       await writeSession(response.data);
       await finish();
     } catch (error) {
-      setProviderNotice(friendlyError(error, "Google sign-in didn't go through. Try again."));
+      setProviderNotice(friendlyError(error, t("signIn.googleFailed")));
     } finally {
       providerLock.current = false;
     }
@@ -310,6 +330,7 @@ export default function SignInScreen() {
       verify.reset();
       return;
     }
+    void clearSignInDraft();
     leave(router, "/welcome");
   }
 
@@ -339,7 +360,7 @@ export default function SignInScreen() {
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={t("signIn.back")}
             hitSlop={8}
             onPress={back}
             style={({ pressed }) => [styles.back, pressed && styles.pressed]}
@@ -349,14 +370,14 @@ export default function SignInScreen() {
 
           <Animated.View style={motion}>
             <Text allowFontScaling maxFontSizeMultiplier={1.2} accessibilityRole="header" style={styles.heading}>
-              {step === "code" ? "Enter your code" : mode === "create" ? "Create account" : "Log in"}
+              {step === "code" ? t("signIn.codeTitle") : mode === "create" ? t("signIn.create") : t("signIn.login")}
             </Text>
             <Text allowFontScaling maxFontSizeMultiplier={1.3} style={styles.support}>
               {step === "code"
-                ? `Enter the 6-digit code for ${country ? spokenNumber(country, national) : "your number"}.`
+                ? t("signIn.codeBody", { number: country ? spokenNumber(country, national) : t("signIn.yourNumber") })
                 : mode === "create"
-                  ? "We'll text a code to this number. Your name comes next."
-                  : "Use the number on your CITYDAY account."}
+                  ? t("signIn.createBody")
+                  : t("signIn.loginBody")}
             </Text>
 
             {step === "phone" ? (
@@ -364,7 +385,7 @@ export default function SignInScreen() {
                 <View style={[styles.phone, focused && styles.phoneFocused]}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={country ? `${country.name}, plus ${country.dial}. Change country` : "Choose country"}
+                    accessibilityLabel={country ? `${country.name}, plus ${country.dial}. ${t("signIn.changeCountry")}` : t("signIn.chooseCountry")}
                     onPress={() => setPicking(true)}
                     style={styles.country}
                   >
@@ -372,13 +393,13 @@ export default function SignInScreen() {
                       {country ? countryFlag(country.iso) : "🌐"}
                     </Text>
                     <Text allowFontScaling style={styles.dial} importantForAccessibility="no">
-                      {country ? `+${country.dial}` : "Country"}
+                      {country ? `+${country.dial}` : t("signIn.country")}
                     </Text>
                   </Pressable>
                   <View style={styles.phoneRule} />
                   <TextInput
-                    accessibilityLabel="Mobile phone number"
-                    accessibilityHint={country ? `${country.name}, country code plus ${country.dial}` : "Choose a country, then enter the mobile number."}
+                    accessibilityLabel={t("signIn.mobile")}
+                    accessibilityHint={country ? `${country.name}, +${country.dial}` : t("signIn.numberHint")}
                     value={national}
                     onChangeText={(value) => {
                       const next = country ? digitsFor(country, value) : value.replace(/\D/g, "");
@@ -393,9 +414,9 @@ export default function SignInScreen() {
                     }}
                     onBlur={() => {
                       setFocused(false);
-                      if (country && national.length > 0 && !phoneReady(country, national)) setFieldNote(`Enter a mobile number for ${country.name}.`);
+                      if (country && national.length > 0 && !phoneReady(country, national)) setFieldNote(t("signIn.numberFor", { country: country.name }));
                     }}
-                    placeholder="Mobile number"
+                    placeholder={t("signIn.mobile")}
                     placeholderTextColor={quiet}
                     keyboardType="phone-pad"
                     inputMode="tel"
@@ -409,7 +430,7 @@ export default function SignInScreen() {
 
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Continue"
+                  accessibilityLabel={t("signIn.continue")}
                   accessibilityState={{ disabled: !ready || start.isPending, busy: start.isPending }}
                   disabled={!ready || start.isPending}
                   onPress={requestCode}
@@ -424,14 +445,14 @@ export default function SignInScreen() {
                     maxFontSizeMultiplier={1.25}
                     style={[styles.continueLabel, !ready && styles.continueLabelDisabled, start.isPending && styles.hiddenLabel]}
                   >
-                    Continue
+                    {t("signIn.continue")}
                   </Text>
                   {start.isPending ? <ActivityIndicator color={page} style={styles.continueSpinner} /> : null}
                 </Pressable>
 
                 {fieldNote || phoneError ? (
                   <Text allowFontScaling style={styles.error}>
-                    {fieldNote ?? friendlyError(phoneError, "That did not work. Try again.")}
+                    {fieldNote ?? friendlyError(phoneError, t("signIn.failed"))}
                   </Text>
                 ) : null}
 
@@ -445,7 +466,7 @@ export default function SignInScreen() {
 
                 <View style={styles.providers}>
                   <ProviderButton
-                    label="Continue with Google"
+                    label={t("signIn.google")}
                     onPress={() => void onGoogle()}
                     mark={<Image source={googleMark} style={styles.googleMark} resizeMode="contain" accessibilityElementsHidden />}
                   />
@@ -463,19 +484,19 @@ export default function SignInScreen() {
                 {verify.isPending ? <ActivityIndicator color={ink} style={styles.codeSpinner} /> : null}
                 {phoneError ? (
                   <Text allowFontScaling style={styles.error}>
-                    {friendlyError(phoneError, "That code is not valid.")}
+                    {friendlyError(phoneError, t("signIn.badCode"))}
                   </Text>
                 ) : null}
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={seconds > 0 ? `Resend in ${seconds} seconds` : "Resend code"}
+                  accessibilityLabel={seconds > 0 ? t("signIn.resendIn", { seconds }) : t("signIn.resend")}
                   accessibilityState={{ disabled: seconds > 0 || start.isPending }}
                   disabled={seconds > 0 || start.isPending}
                   onPress={requestCode}
                   style={styles.resend}
                 >
                   <Text allowFontScaling style={[styles.resendLabel, (seconds > 0 || start.isPending) && styles.resendDisabled]}>
-                    {start.isPending ? "Resending" : seconds > 0 ? `Resend in ${seconds}s` : "Resend code"}
+                    {start.isPending ? t("signIn.resending") : seconds > 0 ? t("signIn.resendIn", { seconds }) : t("signIn.resend")}
                   </Text>
                 </Pressable>
               </View>
@@ -485,27 +506,27 @@ export default function SignInScreen() {
           {step === "phone" ? (
             <View style={styles.footer}>
               <Text allowFontScaling maxFontSizeMultiplier={1.35} style={styles.legal}>
-                By continuing, you agree to our
+                {t("signIn.legalLead")}
               </Text>
               <View style={styles.legalLinks}>
                 <Text allowFontScaling style={styles.legalLink} onPress={() => setLegal("terms")}>
-                  Terms of Service
+                  {t("signIn.terms")}
                 </Text>
                 <Text allowFontScaling style={styles.legal}>
-                  and
+                  {t("signIn.and")}
                 </Text>
                 <Text allowFontScaling style={styles.legalLink} onPress={() => setLegal("privacy")}>
-                  Privacy Policy
+                  {t("signIn.privacy")}
                 </Text>
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={mode === "create" ? "Log in" : "Create account"}
+                accessibilityLabel={mode === "create" ? t("signIn.login") : t("signIn.create")}
                 onPress={() => switchMode(mode === "create" ? "login" : "create")}
                 style={styles.switchMode}
               >
                 <Text allowFontScaling style={styles.switchLabel}>
-                  {mode === "create" ? "Already have an account? Log in" : "New to CITYDAY? Create account"}
+                  {mode === "create" ? t("signIn.switchToLogin") : t("signIn.switchToCreate")}
                 </Text>
               </Pressable>
             </View>
@@ -514,32 +535,30 @@ export default function SignInScreen() {
       </KeyboardAvoidingView>
       <Modal visible={legal !== null} animationType="slide" onRequestClose={() => setLegal(null)}>
         <View style={[styles.picker, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => setLegal(null)} style={styles.back}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("signIn.close")} onPress={() => setLegal(null)} style={styles.back}>
             <Ionicons name="chevron-back" size={26} color={ink} />
           </Pressable>
           <Text allowFontScaling accessibilityRole="header" style={styles.heading}>
-            {legal === "privacy" ? "Privacy Policy" : "Terms of Service"}
+            {legal === "privacy" ? t("signIn.privacy") : t("signIn.terms")}
           </Text>
           <Text allowFontScaling style={styles.legalBody}>
-            {legal === "privacy"
-              ? "Your phone number is used to sign in and is stored with your account. Your name, saves, and plans stay on that account."
-              : "CITYDAY is a city guide. A place's website opens outside the app, and nothing is booked inside CITYDAY."}
+            {legal === "privacy" ? t("signIn.privacyBody") : t("signIn.termsBody")}
           </Text>
         </View>
       </Modal>
       <Modal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
         <View style={[styles.picker, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 12 }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close countries" onPress={() => setPicking(false)} style={styles.back}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("signIn.close")} onPress={() => setPicking(false)} style={styles.back}>
             <Ionicons name="chevron-back" size={26} color={ink} />
           </Pressable>
           <Text allowFontScaling accessibilityRole="header" style={styles.heading}>
-            Country
+            {t("signIn.country")}
           </Text>
           <TextInput
-            accessibilityLabel="Search countries"
+            accessibilityLabel={t("signIn.search")}
             value={countryQuery}
             onChangeText={setCountryQuery}
-            placeholder="Search"
+            placeholder={t("signIn.search")}
             placeholderTextColor={quiet}
             style={styles.countrySearch}
           />
@@ -551,12 +570,14 @@ export default function SignInScreen() {
                 accessibilityLabel={`${item.name}, plus ${item.dial}`}
                 accessibilityState={{ selected: country?.iso === item.iso }}
                 onPress={() => {
+                  countryRef.current = item;
                   setCountry(item);
                   setNational((current) => digitsFor(item, current));
                   setFieldNote(null);
                   if (start.isError) start.reset();
                   setPicking(false);
                   setCountryQuery("");
+                  void offerDeviceNumber();
                 }}
                 style={styles.countryRow}
               >

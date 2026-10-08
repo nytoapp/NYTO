@@ -26,7 +26,10 @@ export {
   type ResolvedTime,
 } from "./intent";
 export {
+  accountPatchSchema,
+  accountSchema,
   authSessionSchema,
+  interestIds,
   challengeStartedSchema,
   destinationResolveRequestSchema,
   destinationResolveResponseSchema,
@@ -50,6 +53,7 @@ export {
   tripCreateRequestSchema,
   tripDetailSchema,
   tripItemRequestSchema,
+  type Account,
   type AuthSession,
   type DestinationResolveResponse,
   type GeoCandidate,

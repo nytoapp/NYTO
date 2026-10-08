@@ -36,6 +36,10 @@ export function dismiss(router: Nav, pathname: string): boolean {
     router.replace(useOnboarding.getState().stage === "app" ? "/profile" : "/welcome");
     return true;
   }
+  if (pathname === "/info") {
+    router.replace("/profile");
+    return true;
+  }
   if (pathname.startsWith("/trip/") || pathname.startsWith("/edit/") || pathname.startsWith("/preview")) {
     router.replace("/trips");
     return true;

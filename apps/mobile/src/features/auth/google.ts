@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { loadNitroModule } from "./nitro";
 
 const unavailable = "Google sign-in isn't available right now.";
 const failed = "Google sign-in didn't go through. Try again.";
@@ -54,14 +55,9 @@ export async function signInWithGoogle(): Promise<GoogleResult> {
     throw new Error(unavailable);
   }
 
-  let native: GoogleModule;
-  try {
-    native = await import("react-native-nitro-google-signin");
-  } catch (error) {
-    console.warn(
-      "[CITYDAY auth] Google native module did not load. Expo Go does not include it. Rebuild with expo run:android after the Web client ID is set.",
-      diagnostic(error),
-    );
+  const native = await loadNitroModule(() => import("react-native-nitro-google-signin"));
+  if (!native) {
+    console.warn("[CITYDAY auth] Google native module did not load. A development build with Nitro is required.");
     throw new Error(unavailable);
   }
 

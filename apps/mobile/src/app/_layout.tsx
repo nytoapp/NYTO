@@ -10,6 +10,8 @@ import { OfflineBanner } from "../components/OfflineBanner";
 import { ThemeProvider } from "../components/theme/ThemeProvider";
 import { queryClient } from "../lib/query-client";
 import { useAuth } from "../features/auth/session";
+import { useSignInDraft } from "../features/auth/sign-in-draft";
+import { useLanguage } from "../features/i18n/language-store";
 import { revealApp } from "../features/landing/reveal";
 import { useDiscoveryLocation } from "../features/location/location-store";
 import { dismiss } from "../features/nav/leave";
@@ -22,6 +24,10 @@ function Startup() {
   const restore = useAuth((state) => state.restore);
   const hydrated = useOnboarding((state) => state.hydrated);
   const hydrateLocation = useDiscoveryLocation((state) => state.hydrate);
+  const languageReady = useLanguage((state) => state.ready);
+  const hydrateLanguage = useLanguage((state) => state.hydrate);
+  const draftReady = useSignInDraft((state) => state.ready);
+  const hydrateDraft = useSignInDraft((state) => state.hydrate);
   const router = useRouter();
   const pathname = usePathname();
   useEffect(() => {
@@ -31,13 +37,15 @@ function Startup() {
   useEffect(() => {
     void restore();
     void hydrateLocation();
-  }, [hydrateLocation, restore]);
+    void hydrateLanguage();
+    void hydrateDraft();
+  }, [hydrateDraft, hydrateLanguage, hydrateLocation, restore]);
   useEffect(() => {
-    if (status === "restoring" || !hydrated) return;
+    if (status === "restoring" || !hydrated || !languageReady) return;
     const timer = setTimeout(revealApp, 1600);
     return () => clearTimeout(timer);
-  }, [hydrated, status]);
-  if (status === "restoring" || !hydrated) {
+  }, [hydrated, languageReady, status]);
+  if (status === "restoring" || !hydrated || !languageReady || !draftReady) {
     return null;
   }
   return (

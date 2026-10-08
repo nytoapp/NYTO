@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { limits } from "@atlas/config";
+import { interestIds } from "@atlas/contracts";
 import { newId } from "./crypto";
 
 export type DeviceInput = { platform: "ios" | "android" | "web"; label?: string | null };
@@ -227,21 +228,26 @@ export class IdentityRepository {
     return { userId, sessionId, roles: roles.rows.map((item: { role: string }) => item.role) };
   }
 
-  async accountFor(userId: string): Promise<{ displayName: string | null; phoneE164: string | null; email: string | null }> {
+  async accountFor(userId: string): Promise<{ displayName: string | null; phoneE164: string | null; email: string | null; interestIds: string[] }> {
     const result = await this.pool.query(
       `select p.display_name,
+              p.interest_ids,
               (select phone_e164 from auth_identities where user_id = p.user_id and phone_e164 is not null order by created_at asc limit 1) as phone_e164,
               (select email from auth_identities where user_id = p.user_id and email is not null order by created_at asc limit 1) as email
        from user_profiles p
        where p.user_id = $1`,
       [userId],
     );
-    const row = result.rows[0] as { display_name: string | null; phone_e164: string | null; email: string | null } | undefined;
+    const row = result.rows[0] as
+      | { display_name: string | null; phone_e164: string | null; email: string | null; interest_ids: unknown }
+      | undefined;
     const displayName = row?.display_name?.trim() ?? "";
+    const stored = Array.isArray(row?.interest_ids) ? row.interest_ids.filter((item): item is string => typeof item === "string") : [];
     return {
       displayName: displayName.length > 0 ? displayName : null,
       phoneE164: row?.phone_e164 ? String(row.phone_e164) : null,
       email: row?.email ? String(row.email) : null,
+      interestIds: interestIds.filter((id) => stored.includes(id)),
     };
   }
 
@@ -249,6 +255,15 @@ export class IdentityRepository {
     const updated = await this.pool.query(
       "update user_profiles set display_name = $2, updated_at = clock_timestamp() where user_id = $1",
       [userId, displayName],
+    );
+    return Boolean(updated.rowCount);
+  }
+
+  async setInterests(userId: string, ids: readonly string[]): Promise<boolean> {
+    const ordered = interestIds.filter((id) => ids.includes(id));
+    const updated = await this.pool.query(
+      "update user_profiles set interest_ids = $2::text[], updated_at = clock_timestamp() where user_id = $1",
+      [userId, ordered],
     );
     return Boolean(updated.rowCount);
   }

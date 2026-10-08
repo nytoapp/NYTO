@@ -5,6 +5,7 @@ import {
   AppState,
   Easing,
   Image,
+  Modal,
   Pressable,
   StatusBar,
   StyleSheet,
@@ -15,8 +16,12 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { serif } from "../../components/theme/tokens";
+import { saveSignInDraft } from "../auth/sign-in-draft";
+import { LanguageChoices } from "../i18n/LanguageChoices";
+import { useLanguage } from "../i18n/language-store";
 import { landingFadeMs, landingHoldMs, stockholmLanding, type LandingContent, type LandingFrame } from "./content";
 import { revealApp } from "./reveal";
 
@@ -289,6 +294,7 @@ function LandingButton({
 
 export function LandingScreen({ content = stockholmLanding }: { content?: LandingContent }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const focused = useIsFocused();
@@ -296,6 +302,8 @@ export function LandingScreen({ content = stockholmLanding }: { content?: Landin
   const reduced = useReducedMotion();
   const leaving = useRef(false);
   const compact = height < 700;
+  const language = useLanguage((state) => state.language);
+  const [languageOpen, setLanguageOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -306,7 +314,9 @@ export function LandingScreen({ content = stockholmLanding }: { content?: Landin
   function go(mode: "create" | "login") {
     if (leaving.current) return;
     leaving.current = true;
-    router.push({ pathname: "/sign-in", params: { mode } });
+    void saveSignInDraft({ mode, countryIso: null, national: "", hinting: false }).then(() => {
+      router.push({ pathname: "/sign-in", params: { mode } });
+    });
   }
 
   return (
@@ -319,19 +329,36 @@ export function LandingScreen({ content = stockholmLanding }: { content?: Landin
         locations={[0, 0.14, 0.3, 0.56, 0.78, 1]}
         style={StyleSheet.absoluteFill}
       />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("landing.language")}
+        onPress={() => setLanguageOpen(true)}
+        style={[styles.language, { top: insets.top + 8, right: __DEV__ ? 56 : 16 }]}
+      >
+        <Text allowFontScaling maxFontSizeMultiplier={1.2} style={styles.languageLabel}>
+          {language === "sv" ? "SV" : "EN"}
+        </Text>
+      </Pressable>
       <View style={[styles.copy, { paddingTop: insets.top + (compact ? 18 : 32) }]} pointerEvents="none">
         <Text allowFontScaling maxFontSizeMultiplier={1.25} accessibilityRole="header" style={[styles.wordmark, compact && styles.wordmarkCompact]}>
           {content.wordmark}
         </Text>
         <Text allowFontScaling maxFontSizeMultiplier={1.25} style={styles.tagline}>
-          {content.tagline}
+          {t("landing.tagline")}
         </Text>
       </View>
       <View style={styles.spacer} />
       <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, 12) + 16 }]}>
-        <LandingButton label="Create account" variant="primary" onPress={() => go("create")} />
-        <LandingButton label="Log in" variant="secondary" onPress={() => go("login")} />
+        <LandingButton label={t("landing.create")} variant="primary" onPress={() => go("create")} />
+        <LandingButton label={t("landing.login")} variant="secondary" onPress={() => go("login")} />
       </View>
+      <Modal visible={languageOpen} transparent animationType="fade" onRequestClose={() => setLanguageOpen(false)}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("signIn.close")} style={styles.scrim} onPress={() => setLanguageOpen(false)}>
+          <Pressable style={[styles.menu, { top: insets.top + 56, right: 16 }]} onPress={() => undefined}>
+            <LanguageChoices onChose={() => setLanguageOpen(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -361,6 +388,29 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(6, 10, 16, 0.35)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
+  },
+  language: {
+    position: "absolute",
+    zIndex: 2,
+    minWidth: 44,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(247, 244, 238, 0.84)",
+    backgroundColor: "rgba(8, 12, 18, 0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  languageLabel: { color: ivory, fontSize: 13, fontWeight: "600", letterSpacing: 0.6 },
+  scrim: { flex: 1, backgroundColor: "rgba(9, 14, 22, 0.28)" },
+  menu: {
+    position: "absolute",
+    width: 260,
+    borderRadius: 18,
+    backgroundColor: ivory,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
   },
   spacer: { flex: 1 },
   actions: { paddingHorizontal: 24, gap: 12 },

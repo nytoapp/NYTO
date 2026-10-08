@@ -3,6 +3,7 @@ import { SkipThrottle } from "@nestjs/throttler";
 import Redis from "ioredis";
 import type { Request } from "express";
 import {
+  accountPatchSchema,
   destinationResolveRequestSchema,
   emailLoginRequestSchema,
   emailRegisterRequestSchema,
@@ -148,11 +149,7 @@ export class AuthController {
   }
 }
 
-function readDisplayName(body: unknown): string {
-  const value = (body as { displayName?: unknown } | null)?.displayName;
-  if (typeof value !== "string") {
-    throw new AppError(ErrorCodes.VALIDATION_ERROR, "Enter your name.", 422);
-  }
+function readDisplayName(value: string): string {
   const name = value.trim().replace(/\s+/g, " ");
   if (name.length < 1 || name.length > 40 || !/^[\p{L}][\p{L}\s'.-]*$/u.test(name)) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, "Enter your name using letters.", 422);
@@ -172,10 +169,22 @@ export class AccountController {
 
   @Patch()
   async update(@Req() request: Request, @CurrentUser() user: NonNullable<Request["user"]>, @Body() body: unknown) {
-    const displayName = readDisplayName(body);
-    const saved = await this.identity.setDisplayName(user.userId, displayName);
-    if (!saved) {
-      throw new AppError(ErrorCodes.NOT_FOUND, "That account is not available.", 404);
+    const input = parseBody(accountPatchSchema, body);
+    if (input.displayName === undefined && input.interestIds === undefined) {
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, "Check the request and try again.", 422);
+    }
+    if (input.displayName !== undefined) {
+      const displayName = readDisplayName(input.displayName);
+      const saved = await this.identity.setDisplayName(user.userId, displayName);
+      if (!saved) {
+        throw new AppError(ErrorCodes.NOT_FOUND, "That account is not available.", 404);
+      }
+    }
+    if (input.interestIds !== undefined) {
+      const saved = await this.identity.setInterests(user.userId, input.interestIds);
+      if (!saved) {
+        throw new AppError(ErrorCodes.NOT_FOUND, "That account is not available.", 404);
+      }
     }
     return envelope(request, await this.identity.accountFor(user.userId));
   }

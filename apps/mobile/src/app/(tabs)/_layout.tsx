@@ -3,7 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Redirect, Stack, Tabs } from "expo-router";
 import { StyleSheet } from "react-native";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { loadAccount } from "../../features/auth/account";
+import { useSignInDraft } from "../../features/auth/sign-in-draft";
 import { useSession } from "../../features/auth/useSession";
 import { city, font } from "../../features/city/theme";
 import { revealApp } from "../../features/landing/reveal";
@@ -18,13 +20,18 @@ const icons = {
 } as const;
 
 export default function TabLayout() {
+  const { t } = useTranslation();
   const stage = useOnboarding((state) => state.stage);
   const { signedIn } = useSession();
+  const draft = useSignInDraft((state) => state.draft);
   const account = useQuery({ queryKey: ["account"], enabled: signedIn && stage === "app", queryFn: loadAccount });
   useEffect(() => {
     if (stage === "app") revealApp();
   }, [stage]);
   if (stage === "welcome") {
+    if (!signedIn && draft) {
+      return <Redirect href={{ pathname: "/sign-in", params: { mode: draft.mode } }} />;
+    }
     return <Redirect href="/welcome" />;
   }
   if (stage === "interests") {
@@ -55,35 +62,35 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: t("tabs.home"),
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.index.on : icons.index.off} color={color} size={22} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: "Explore",
+          title: t("tabs.explore"),
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.explore.on : icons.explore.off} color={color} size={22} />,
         }}
       />
       <Tabs.Screen
         name="trips"
         options={{
-          title: "Plans",
+          title: t("tabs.plans"),
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.trips.on : icons.trips.off} color={color} size={22} />,
         }}
       />
       <Tabs.Screen
         name="saved"
         options={{
-          title: "Saved",
+          title: t("tabs.saved"),
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.saved.on : icons.saved.off} color={color} size={22} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: t("tabs.profile"),
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? icons.profile.on : icons.profile.off} color={color} size={22} />,
         }}
       />

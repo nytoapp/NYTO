@@ -54,6 +54,31 @@ export function countryFlag(iso: string): string {
   return String.fromCodePoint(...code.split("").map((char) => 0x1f1e6 + char.charCodeAt(0) - 65));
 }
 
+export function formatPhone(e164: string | null | undefined): string {
+  if (!e164) return "";
+  const digits = e164.replace(/\D/g, "");
+  if (!digits) return "";
+  const country = phoneCountries
+    .filter((item) => {
+      if (!digits.startsWith(item.dial)) return false;
+      const length = digits.length - item.dial.length;
+      return length >= item.min && length <= item.max;
+    })
+    .sort((a, b) => b.dial.length - a.dial.length)[0];
+  if (!country) return e164.startsWith("+") ? e164 : `+${digits}`;
+  return `+${country.dial} ${groupNational(digits.slice(country.dial.length))}`;
+}
+
+function groupNational(national: string): string {
+  if (national.length <= 4) return national;
+  if (national.length <= 6) return `${national.slice(0, 3)} ${national.slice(3)}`;
+  if (national.length <= 10) {
+    const split = national.length > 8 ? 5 : 4;
+    return `${national.slice(0, split)} ${national.slice(split)}`;
+  }
+  return national.replace(/(\d{3})(?=\d)/g, "$1 ").trim();
+}
+
 export function nationalNumber(input: string, max: number): string {
   let digits = input.replace(/\D/g, "");
   if (digits.startsWith("0")) digits = digits.slice(1);
