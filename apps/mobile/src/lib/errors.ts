@@ -1,6 +1,10 @@
-export function friendlyError(error: unknown, fallback = "Nothing came through. Give it another try."): string {
+import { i18n } from "../i18n";
+import { appSentence } from "../features/i18n/labels";
+
+export function friendlyError(error: unknown, fallback?: string): string {
   const message = error instanceof Error ? error.message : "";
   const lowered = message.toLowerCase();
+  const safe = fallback ?? i18n.t("errors.generic");
   if (
     !message ||
     lowered.includes("localhost") ||
@@ -12,7 +16,7 @@ export function friendlyError(error: unknown, fallback = "Nothing came through. 
     lowered.includes("exception") ||
     message.length > 160
   ) {
-    return fallback;
+    return safe;
   }
-  return message;
+  return appSentence(message, i18n.t);
 }

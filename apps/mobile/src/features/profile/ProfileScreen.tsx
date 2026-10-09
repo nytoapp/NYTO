@@ -12,6 +12,7 @@ import { loadAccount, saveInterests } from "../auth/account";
 import { saveSignInDraft } from "../auth/sign-in-draft";
 import { formatPhone } from "../auth/countries";
 import { useSession } from "../auth/useSession";
+import { interestLabel } from "../i18n/labels";
 import { useLanguage } from "../i18n/language-store";
 import { useDiscoveryLocation } from "../location/location-store";
 import { interestsById } from "../onboarding/interests";
@@ -180,9 +181,9 @@ export function ProfileScreen() {
           ) : (
             <View style={styles.chips}>
               {chosen.map((item) => (
-                <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label} onPress={openInterests} style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
+                <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={interestLabel(item.id, t)} onPress={openInterests} style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
                   <Image source={item.image} style={styles.chipImage} />
-                  <CityText size="meta">{item.label}</CityText>
+                  <CityText size="meta">{interestLabel(item.id, t)}</CityText>
                 </Pressable>
               ))}
             </View>

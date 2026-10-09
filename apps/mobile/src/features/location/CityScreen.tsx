@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { leave } from "../nav/leave";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,6 +16,7 @@ import { friendlyError } from "../../lib/errors";
 import { useDiscoveryLocation, type SelectedLocation } from "./location-store";
 
 export function CityScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const selected = useDiscoveryLocation((state) => state.selected);
@@ -26,7 +28,7 @@ export function CityScreen() {
       const params = new URLSearchParams({ q: query.trim() });
       const response = await apiRequest<{ candidates: GeoCandidate[] }>(`/api/v1/geo/suggest?${params.toString()}`);
       if (response.error || !response.data || !Array.isArray(response.data.candidates)) {
-        throw new Error(response.error?.message ?? "Cities could not be loaded.");
+        throw new Error(response.error?.message ?? t("city.loadFailed"));
       }
       return response.data.candidates;
     },
@@ -51,17 +53,17 @@ export function CityScreen() {
         contentContainerStyle={{ paddingTop: insets.top + space[8], paddingBottom: insets.bottom + space[32], paddingHorizontal: space.page, gap: space[16] }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[8] }}>
-          <IconButton label="Back" icon="chevron-back" onPress={() => leave(router, "/")} />
+          <IconButton label={t("common.back")} icon="chevron-back" onPress={() => leave(router, "/")} />
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.h1, { color: color.primaryText, flex: 1 }]}>
-            Choose a city
+            {t("city.title")}
           </Text>
         </View>
         <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, { color: color.secondaryText }]}>
-          This is the city you want to explore. It does not have to be where you are.
+          {t("city.body")}
         </Text>
-        <SearchBar value={query} onChangeText={setQuery} placeholder="Search cities" accessibilityLabel="Search cities" autoCapitalize="words" />
+        <SearchBar value={query} onChangeText={setQuery} placeholder={t("city.search")} accessibilityLabel={t("city.search")} autoCapitalize="words" />
         {cities.isError ? (
-          <EmptyState title="Cities didn't load" body={friendlyError(cities.error, "Try again.")} action="Try again" onAction={() => void cities.refetch()} />
+          <EmptyState title={t("city.failed")} body={friendlyError(cities.error, t("city.again"))} action={t("common.tryAgain")} onAction={() => void cities.refetch()} />
         ) : null}
         {(Array.isArray(cities.data) ? cities.data : []).map((city) => {
           const on = selected?.id === city.id;
@@ -79,18 +81,18 @@ export function CityScreen() {
               </Text>
               <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, { color: color.mutedText }]}>
                 {city.countryCode}
-                {on ? " · Selected" : ""}
+                {on ? ` · ${t("city.selected")}` : ""}
               </Text>
             </Pressable>
           );
         })}
         {cities.isSuccess && Array.isArray(cities.data) && cities.data.length === 0 ? (
-          <EmptyState title="No city by that name" body="CITYDAY only lists cities that are already in the guide." />
+          <EmptyState title={t("city.none")} body={t("city.noneBody")} />
         ) : null}
         {selected ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Clear selected city"
+            accessibilityLabel={t("city.clear")}
             onPress={() => {
               setSelected(null);
               leave(router, "/");
@@ -98,7 +100,7 @@ export function CityScreen() {
             style={{ minHeight: 48, justifyContent: "center" }}
           >
             <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, { color: color.secondaryText }]}>
-              Clear selected city
+              {t("city.clear")}
             </Text>
           </Pressable>
         ) : null}

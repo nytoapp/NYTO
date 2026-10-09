@@ -1,4 +1,5 @@
 import { apiRequest } from "../../api/client";
+import { intlLocale, titleCase } from "../../i18n";
 import { useAuth } from "../auth/session";
 
 export type TripRow = {
@@ -38,11 +39,12 @@ export function civilParts(value: string): { weekday: string; weekdayShort: stri
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   if (!match) return { weekday: value, weekdayShort: value, day: "", month: "" };
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const locale = intlLocale();
   return {
-    weekday: new Intl.DateTimeFormat("en", { weekday: "long", timeZone: "UTC" }).format(date),
-    weekdayShort: new Intl.DateTimeFormat("en", { weekday: "short", timeZone: "UTC" }).format(date),
+    weekday: titleCase(new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" }).format(date)),
+    weekdayShort: titleCase(new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(date)),
     day: String(date.getUTCDate()),
-    month: new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" }).format(date),
+    month: titleCase(new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(date)),
   };
 }
 

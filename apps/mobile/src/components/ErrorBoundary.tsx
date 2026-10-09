@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
 import { View } from "react-native";
+import { i18n } from "../i18n";
 import { AppText, Button } from "./ui";
 import { colors } from "./theme/tokens";
 
@@ -17,8 +18,8 @@ export class AppErrorBoundary extends Component<Props, State> {
     if (this.state.failed) {
       return (
         <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: "center", padding: 24, gap: 12 }}>
-          <AppText role="headline">The screen failed to load</AppText>
-          <Button label="Try again" onPress={() => this.setState({ failed: false })} />
+          <AppText role="headline">{i18n.t("errors.screen")}</AppText>
+          <Button label={i18n.t("common.tryAgain")} onPress={() => this.setState({ failed: false })} />
         </View>
       );
     }

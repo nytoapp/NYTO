@@ -21,7 +21,7 @@ export function AccountInfoScreen({ topic }: { topic: string }) {
     <View style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32, paddingHorizontal: citySpace.page }} showsVerticalScrollIndicator={false}>
-        <IconButton label="Back" icon="chevron-back" onPress={() => leave(router, "/profile")} />
+        <IconButton label={t("common.back")} icon="chevron-back" onPress={() => leave(router, "/profile")} />
         <CityText size="display" style={styles.title}>
           {title}
         </CityText>

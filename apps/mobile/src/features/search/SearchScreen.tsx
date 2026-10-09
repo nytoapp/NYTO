@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
 import { leave } from "../nav/leave";
 import { useMemo, useState } from "react";
@@ -9,9 +10,11 @@ import { categoryArt } from "../city/category-art";
 import { SearchBar } from "../city/search-bar";
 import { color, font, fontScaleCap, space } from "../city/theme";
 import { browseCategories, popularSearches } from "../discovery/browse";
+import { catalogName, ideaName } from "../i18n/labels";
 import { useSearchHandoff } from "./handoff";
 
 export function SearchScreen() {
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const recent = useSearchHandoff((state) => state.recent);
@@ -23,10 +26,16 @@ export function SearchScreen() {
 
   const suggestions = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const ideas = popularSearches.filter((item) => !needle || item.toLowerCase().includes(needle));
-    const categories = browseCategories.filter((item) => !needle || item.label.toLowerCase().includes(needle) || item.query.toLowerCase().includes(needle));
+    const ideas = popularSearches.filter((item) => {
+      const label = ideaName(item, t).toLowerCase();
+      return !needle || item.toLowerCase().includes(needle) || label.includes(needle);
+    });
+    const categories = browseCategories.filter((item) => {
+      const label = catalogName(item.label, t).toLowerCase();
+      return !needle || label.includes(needle) || item.label.toLowerCase().includes(needle) || item.query.toLowerCase().includes(needle);
+    });
     return { ideas, categories };
-  }, [query]);
+  }, [query, i18n.language, t]);
 
   function go(next: string) {
     const trimmed = next.trim();
@@ -39,7 +48,7 @@ export function SearchScreen() {
       setSubmitting(false);
     } catch {
       setSubmitting(false);
-      setError("That search could not be opened. Try again.");
+      setError(t("search.failed"));
     }
   }
 
@@ -47,7 +56,7 @@ export function SearchScreen() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: color.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <StatusBar style="dark" />
       <View style={{ paddingTop: insets.top + space[8], paddingLeft: space[8], paddingRight: 48, paddingBottom: space[8], flexDirection: "row", alignItems: "center", gap: space[4] }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/")} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("common.back")} onPress={() => leave(router, "/")} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
           <Ionicons name="chevron-back" size={22} color={color.primaryText} />
         </Pressable>
         <View style={{ flex: 1 }}>
@@ -58,8 +67,8 @@ export function SearchScreen() {
               setSubmitting(false);
               setQuery(value);
             }}
-            placeholder="Search the city"
-            accessibilityLabel="Search"
+            placeholder={t("search.placeholder")}
+            accessibilityLabel={t("search.label")}
             autoFocus
             onSubmit={() => go(query)}
           />
@@ -68,7 +77,7 @@ export function SearchScreen() {
       <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + space[24], paddingHorizontal: space.page }}>
         {submitting ? (
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText, marginTop: space[16] }]}>
-            Opening search
+            {t("search.opening")}
           </Text>
         ) : null}
         {error ? (
@@ -78,10 +87,10 @@ export function SearchScreen() {
         ) : null}
 
         {typing ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Search for ${query.trim()}`} onPress={() => go(query)} style={rowStyle}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("search.forLabel", { query: query.trim() })} onPress={() => go(query)} style={rowStyle}>
             <Ionicons name="search-outline" size={18} color={color.mutedText} />
             <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, { color: color.primaryText, flex: 1 }]}>
-              Search “{query.trim()}”
+              {t("search.for", { query: query.trim() })}
             </Text>
           </Pressable>
         ) : null}
@@ -89,7 +98,7 @@ export function SearchScreen() {
         {!typing && recent.length > 0 ? (
           <View style={{ paddingTop: space[24], gap: space[4] }}>
             <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, { color: color.mutedText }]}>
-              RECENT
+              {t("search.recent").toLocaleUpperCase()}
             </Text>
             {recent.map((item) => (
               <Pressable key={item} accessibilityRole="button" accessibilityLabel={item} onPress={() => go(item)} style={rowStyle}>
@@ -105,13 +114,13 @@ export function SearchScreen() {
         {suggestions.ideas.length > 0 ? (
           <View style={{ paddingTop: space[24], gap: space[4] }}>
             <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, { color: color.mutedText }]}>
-              IDEAS
+              {t("search.ideas").toLocaleUpperCase()}
             </Text>
             {suggestions.ideas.map((item) => (
-              <Pressable key={item} accessibilityRole="button" accessibilityLabel={item} onPress={() => go(item)} style={rowStyle}>
+              <Pressable key={item} accessibilityRole="button" accessibilityLabel={ideaName(item, t)} onPress={() => go(item)} style={rowStyle}>
                 <Ionicons name="sparkles-outline" size={18} color={color.mutedText} />
                 <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, { color: color.primaryText, flex: 1 }]}>
-                  {item}
+                  {ideaName(item, t)}
                 </Text>
               </Pressable>
             ))}
@@ -121,14 +130,14 @@ export function SearchScreen() {
         {suggestions.categories.length > 0 ? (
           <View style={{ paddingTop: space[24], gap: space[12] }}>
             <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, { color: color.mutedText }]}>
-              CATEGORIES
+              {t("search.categories").toLocaleUpperCase()}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[12], paddingVertical: space[4] }}>
               {suggestions.categories.map((item) => (
-                <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label} onPress={() => go(item.query)} style={{ width: 76, alignItems: "center", gap: space[8] }}>
+                <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={catalogName(item.label, t)} onPress={() => go(item.query)} style={{ width: 76, alignItems: "center", gap: space[8] }}>
                   <Image source={categoryArt(item.label)} style={{ width: 64, height: 64, borderRadius: 20 }} />
                   <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} numberOfLines={1} style={[font.caption, { color: color.primaryText }]}>
-                    {item.label}
+                    {catalogName(item.label, t)}
                   </Text>
                 </Pressable>
               ))}

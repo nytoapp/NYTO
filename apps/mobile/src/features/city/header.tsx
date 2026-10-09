@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,6 +20,7 @@ export function CityHeader({
   transparent?: boolean;
   safe?: boolean;
 }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   return (
     <View
@@ -35,7 +37,7 @@ export function CityHeader({
       }}
     >
       {onBack ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={space[8]} onPress={onBack} style={{ width: 48, height: 48, alignItems: "flex-start", justifyContent: "center" }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("common.back")} hitSlop={space[8]} onPress={onBack} style={{ width: 48, height: 48, alignItems: "flex-start", justifyContent: "center" }}>
           <Ionicons name="chevron-back" size={24} color={color.primaryText} />
         </Pressable>
       ) : (

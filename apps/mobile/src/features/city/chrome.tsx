@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Keyboard, Pressable, StyleSheet, Text, View, type ImageStyle, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CityImage } from "./image";
@@ -123,6 +124,7 @@ export function EmptyState({
 }
 
 export function GuideFab({ from }: { from?: string }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
@@ -138,13 +140,13 @@ export function GuideFab({ from }: { from?: string }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Ask your city guide"
+      accessibilityLabel={t("guide.ask")}
       onPress={() => router.push({ pathname: "/guide", params: from ? { from } : {} })}
       style={({ pressed }) => [styles.fab, elevation.floating, { bottom: Math.max(insets.bottom, 12) + 8 }, pressed && styles.pressed]}
     >
       <Ionicons name="sparkles-outline" size={16} color={city.onDark} />
       <Text allowFontScaling maxFontSizeMultiplier={1.2} style={styles.fabLabel}>
-        Ask your city guide
+        {t("guide.ask")}
       </Text>
     </Pressable>
   );

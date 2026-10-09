@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Linking, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DestinationResolveResponse, TripDetail } from "@atlas/contracts";
@@ -11,7 +12,9 @@ import { loadSubject } from "./load-subject";
 import { useSession } from "../auth/useSession";
 import { IconButton, PrimaryButton } from "../city/buttons";
 import { EmptyState } from "../city/chrome";
-import { formatPrice, kindLabel } from "../city/format";
+import { formatPrice, kindLabel, weekdayName } from "../city/format";
+import { intlLocale } from "../../i18n";
+import { catalogName, kindName, partLabel } from "../i18n/labels";
 import { CategoryCover } from "../city/place-card";
 import { CityImage } from "../city/image";
 import { Skeleton, TextSkeleton } from "../city/skeleton";
@@ -20,9 +23,8 @@ import { friendlyError } from "../../lib/errors";
 import { loadSaves, readSaveList } from "../saved/save-list";
 import { civilParts, loadTrips, readTripList, type TripRow } from "../trips/trip-list";
 
-const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
 export function SubjectScreen({ id }: { id: string }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -52,7 +54,7 @@ export function SubjectScreen({ id }: { id: string }) {
   const save = useMutation({
     mutationFn: async () => {
       const response = await apiRequest<{ id: string }>("/api/v1/saves", { method: "POST", body: JSON.stringify({ subjectId: id }) });
-      if (response.error || !response.data) throw new Error(response.error?.message ?? "Couldn't save this.");
+      if (response.error || !response.data) throw new Error(response.error?.message ?? t("place.saveFailed"));
       return response.data;
     },
     onSuccess: () => {
@@ -65,7 +67,7 @@ export function SubjectScreen({ id }: { id: string }) {
         method: "POST",
         body: JSON.stringify({ subjectId: id, slot: input.slot }),
       });
-      if (response.error || !response.data) throw new Error(response.error?.message ?? "Couldn't add this to the plan.");
+      if (response.error || !response.data) throw new Error(response.error?.message ?? t("place.planFailed"));
       return response.data;
     },
     onSuccess: async (_data, input) => {
@@ -80,10 +82,10 @@ export function SubjectScreen({ id }: { id: string }) {
         method: "POST",
         body: JSON.stringify({ destinationId }),
       });
-      if (response.error || !response.data) throw new Error(response.error?.message ?? "That link is not available.");
+      if (response.error || !response.data) throw new Error(response.error?.message ?? t("place.linkFailed"));
       await Linking.openURL(response.data.preferredUrl);
     },
-    onError: (error) => setActionError(friendlyError(error, "That link is not available.")),
+    onError: (error) => setActionError(friendlyError(error, t("place.linkFailed"))),
   });
 
   const alreadySaved = readSaveList(saved.data).some((item) => item.subjectId === id);
@@ -111,7 +113,7 @@ export function SubjectScreen({ id }: { id: string }) {
       <View style={{ flex: 1, backgroundColor: color.background }}>
         <Skeleton height={120} round={0} />
         <View style={{ position: "absolute", top: insets.top + space[8], left: space[16] }}>
-          <RoundControl label="Back" icon="chevron-back" onPress={() => leave(router, "/")} />
+          <RoundControl label={t("common.back")} icon="chevron-back" onPress={() => leave(router, "/")} />
         </View>
         <View style={{ padding: space.page, gap: space[12] }}>
           <TextSkeleton width="40%" />
@@ -126,8 +128,8 @@ export function SubjectScreen({ id }: { id: string }) {
   if (query.isError || !query.data) {
     return (
       <View style={{ flex: 1, backgroundColor: color.background, paddingTop: insets.top, paddingHorizontal: space.page }}>
-        <IconButton label="Back" icon="chevron-back" onPress={() => leave(router, "/")} />
-        <EmptyState title="This didn't load" body={friendlyError(query.error, "Give it another try.")} action="Try again" onAction={() => void query.refetch()} />
+        <IconButton label={t("common.back")} icon="chevron-back" onPress={() => leave(router, "/")} />
+        <EmptyState title={t("place.failed")} body={friendlyError(query.error, t("place.again"))} action={t("common.tryAgain")} onAction={() => void query.refetch()} />
       </View>
     );
   }
@@ -140,7 +142,7 @@ export function SubjectScreen({ id }: { id: string }) {
   const openPlans = readTripList(trips.data).filter((trip) => trip.status !== "past");
   const chosen = openPlans.find((trip) => trip.id === pickedId) ?? openPlans.find((trip) => trip.id === routePlan) ?? openPlans.find((trip) => trip.status === "current") ?? openPlans[0];
   const external = place.booking?.destinationId && place.booking.capability !== "unavailable" ? place.booking : null;
-  const externalLabel = external?.capability === "website" || !external?.label ? "Open website" : external.label;
+  const externalLabel = external?.capability === "website" || !external?.label ? t("place.website") : external.label;
 
   return (
     <View style={{ flex: 1, backgroundColor: color.background }}>
@@ -156,13 +158,13 @@ export function SubjectScreen({ id }: { id: string }) {
             <CategoryCover label={place.category ?? kindLabel(place.kind)} style={{ width, height: heroHeight }} />
           )}
           <View style={{ position: "absolute", top: insets.top + space[8], left: space[16], right: space[16], flexDirection: "row", justifyContent: "space-between" }}>
-            <RoundControl label="Back" icon="chevron-back" onPress={() => leave(router, "/")} />
-            <RoundControl label={alreadySaved ? "Saved" : "Save for later"} icon={alreadySaved ? "bookmark" : "bookmark-outline"} onPress={onSave} />
+            <RoundControl label={t("common.back")} icon="chevron-back" onPress={() => leave(router, "/")} />
+            <RoundControl label={alreadySaved ? t("place.saved") : t("place.save")} icon={alreadySaved ? "bookmark" : "bookmark-outline"} onPress={onSave} />
           </View>
           {place.category || place.kind ? (
             <View style={{ position: "absolute", left: space[16], bottom: space[16], paddingHorizontal: space[12], paddingVertical: space[8], borderRadius: radius.pill, backgroundColor: "rgba(255,252,248,0.92)" }}>
               <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, { color: color.primaryText }]}>
-                {(place.category ?? kindLabel(place.kind)).toUpperCase()}
+                {(place.category ? catalogName(place.category, t) : kindName(place.kind, t)).toLocaleUpperCase()}
               </Text>
             </View>
           ) : null}
@@ -179,7 +181,7 @@ export function SubjectScreen({ id }: { id: string }) {
           ) : null}
           {place.rating !== null || place.reviewCount !== null || price ? (
             <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodyMedium, { color: color.primaryText }]}>
-              {[place.rating !== null ? place.rating.toFixed(1) : null, place.reviewCount !== null ? `${place.reviewCount} notes` : null, price]
+              {[place.rating !== null ? place.rating.toFixed(1) : null, place.reviewCount !== null ? t("place.notes", { count: place.reviewCount }) : null, price]
                 .filter(Boolean)
                 .join(" · ")}
             </Text>
@@ -192,22 +194,22 @@ export function SubjectScreen({ id }: { id: string }) {
           {hours.length > 0 ? (
             <View style={{ gap: space[4], marginTop: space[8] }}>
               <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.h3, { color: color.primaryText }]}>
-                Hours
+                {t("place.hours")}
               </Text>
               {hours.map((hour) => (
                 <Text key={`${hour.weekday}-${hour.opens}`} allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText }]}>
-                  {weekdays[hour.weekday] ?? "Day"} · {hour.opens}–{hour.closes}
+                  {weekdayName(hour.weekday)} · {hour.opens}–{hour.closes}
                 </Text>
               ))}
             </View>
           ) : null}
           {place.startsAt ? (
             <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText }]}>
-              {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", timeZone: place.timezone ?? undefined }).format(new Date(place.startsAt))}
+              {new Intl.DateTimeFormat(intlLocale(), { dateStyle: "medium", timeStyle: "short", timeZone: place.timezone ?? undefined }).format(new Date(place.startsAt))}
             </Text>
           ) : null}
           {place.phone ? (
-            <Pressable accessibilityRole="link" accessibilityLabel={`Call ${place.phone}`} onPress={() => void Linking.openURL(`tel:${place.phone}`)}>
+            <Pressable accessibilityRole="link" accessibilityLabel={t("place.call", { number: place.phone })} onPress={() => void Linking.openURL(`tel:${place.phone}`)}>
               <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodyMedium, { color: color.primaryText }]}>
                 {place.phone}
               </Text>
@@ -220,7 +222,7 @@ export function SubjectScreen({ id }: { id: string }) {
           ) : null}
           {external?.destinationId ? (
             <View style={{ gap: space[8], marginTop: space[8] }}>
-              <PrimaryButton label={openDestination.isPending ? "Opening" : externalLabel} onPress={() => openDestination.mutate(external.destinationId as string)} />
+              <PrimaryButton label={openDestination.isPending ? t("place.opening") : externalLabel} onPress={() => openDestination.mutate(external.destinationId as string)} />
               <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText }]}>
                 This opens outside CITYDAY. Nothing is booked inside the app.
               </Text>
@@ -228,7 +230,7 @@ export function SubjectScreen({ id }: { id: string }) {
           ) : null}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={alreadySaved ? "Saved" : "Save for later"}
+            accessibilityLabel={alreadySaved ? t("place.saved") : t("place.save")}
             onPress={onSave}
             style={{
               minHeight: 72,
@@ -247,24 +249,24 @@ export function SubjectScreen({ id }: { id: string }) {
             </View>
             <View style={{ flex: 1, gap: 2 }}>
               <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodyMedium, { color: color.primaryText }]}>
-                {alreadySaved ? "Saved" : "Save for later"}
+                {alreadySaved ? t("place.saved") : t("place.save")}
               </Text>
               <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText }]}>
-                {alreadySaved ? "In Saved. Tap to take it off." : "Keeps the place. It does not go on a day."}
+                {alreadySaved ? t("place.savedBody") : t("place.saveBody")}
               </Text>
             </View>
           </Pressable>
           {signedIn && chosen ? (
             <View style={{ gap: space[12] }}>
               <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.h3, { color: color.primaryText }]}>
-                {dayHeading(chosen)}
+                {dayHeading(chosen, t)}
               </Text>
               {openPlans.length > 1 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[8] }}>
                   {openPlans.map((trip) => {
                     const on = trip.id === chosen.id;
                     const date = civilParts(trip.startsOn);
-                    const label = trip.status === "current" ? "Today" : `${date.weekdayShort} ${date.day}`;
+                    const label = trip.status === "current" ? t("plans.today") : `${date.weekdayShort} ${date.day}`;
                     return (
                       <Pressable
                         key={trip.id}
@@ -285,21 +287,21 @@ export function SubjectScreen({ id }: { id: string }) {
               <View style={{ flexDirection: "row", gap: space[8] }}>
                 {(
                   [
-                    ["Morning", "morning"],
-                    ["Afternoon", "afternoon"],
-                    ["Evening", "dinner"],
+                    ["morning", "morning"],
+                    ["afternoon", "afternoon"],
+                    ["evening", "dinner"],
                   ] as const
-                ).map(([label, slot]) => (
+                ).map(([part, slot]) => (
                   <Pressable
                     key={slot}
                     accessibilityRole="button"
-                    accessibilityLabel={`Add to the ${label.toLowerCase()}`}
+                    accessibilityLabel={t("place.addPart", { part: partLabel(part, t).toLocaleLowerCase() })}
                     disabled={addToPlan.isPending}
                     onPress={() => addToPlan.mutate({ tripId: chosen.id, slot })}
                     style={{ flex: 1, minHeight: 48, borderRadius: radius.pill, borderWidth: 1, borderColor: routeSlot === slot ? color.accent : color.border, alignItems: "center", justifyContent: "center", backgroundColor: routeSlot === slot ? color.accent : color.surface, opacity: addToPlan.isPending ? 0.6 : 1 }}
                   >
                     <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.label, { color: routeSlot === slot ? color.onAccent : color.primaryText }]}>
-                      {addToPlan.isPending ? "Adding" : label}
+                      {addToPlan.isPending ? t("place.adding") : partLabel(part, t)}
                     </Text>
                   </Pressable>
                 ))}
@@ -307,25 +309,25 @@ export function SubjectScreen({ id }: { id: string }) {
             </View>
           ) : null}
           {signedIn && !chosen && trips.isSuccess ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Open Plans" onPress={() => router.dismissTo("/trips")} style={{ minHeight: 48, justifyContent: "center" }}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t("place.startDay")} onPress={() => router.dismissTo("/trips")} style={{ minHeight: 48, justifyContent: "center" }}>
               <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodyMedium, { color: color.primaryText }]}>
-                Start a day in Plans
+                {t("place.startDay")}
               </Text>
             </Pressable>
           ) : null}
           {actionError ? <Text style={[font.bodySmall, { color: color.error }]}>{actionError}</Text> : null}
-          {save.isError ? <Text style={[font.bodySmall, { color: color.error }]}>{friendlyError(save.error, "Couldn't save this.")}</Text> : null}
-          {addToPlan.isError ? <Text style={[font.bodySmall, { color: color.error }]}>{friendlyError(addToPlan.error, "Couldn't add this to the plan.")}</Text> : null}
+          {save.isError ? <Text style={[font.bodySmall, { color: color.error }]}>{friendlyError(save.error, t("place.saveFailed"))}</Text> : null}
+          {addToPlan.isError ? <Text style={[font.bodySmall, { color: color.error }]}>{friendlyError(addToPlan.error, t("place.planFailed"))}</Text> : null}
         </View>
       </ScrollView>
     </View>
   );
 }
 
-function dayHeading(trip: TripRow): string {
-  if (trip.status === "current") return "Add to today";
+function dayHeading(trip: TripRow, t: (key: string, options?: Record<string, string>) => string): string {
+  if (trip.status === "current") return t("place.addToday");
   const date = civilParts(trip.startsOn);
-  return `Add to ${date.weekday}`;
+  return t("place.addTo", { day: date.weekday });
 }
 
 function RoundControl({ label, icon, onPress, tint = color.primaryText }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; tint?: string }) {

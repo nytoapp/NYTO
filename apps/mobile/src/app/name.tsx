@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { TextInput, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,9 +9,11 @@ import { CityText, DarkButton } from "../features/city/chrome";
 import { city, cityRadius, citySpace, color } from "../features/city/theme";
 import { loadAccount, saveDisplayName } from "../features/auth/account";
 import { leave } from "../features/nav/leave";
+import { friendlyError } from "../lib/errors";
 import { useOnboarding } from "../features/onboarding/store";
 
 export default function NameScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -51,7 +54,7 @@ export default function NameScreen() {
       await enterApp(interests);
       router.replace("/");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't save your name.");
+      setError(friendlyError(caught, t("name.failed")));
       setSaving(false);
     }
   }
@@ -68,18 +71,18 @@ export default function NameScreen() {
         }}
       />
       <StatusBar style="dark" />
-      <CityText size="display">What should we call you?</CityText>
+      <CityText size="display">{t("name.title")}</CityText>
       <CityText tone="muted" style={{ marginTop: 8 }}>
-        {next === "stay" ? "This is the name on your CITYDAY profile." : "This finishes your account."}
+        {next === "stay" ? t("name.stay") : t("name.finish")}
       </CityText>
       <TextInput
-        accessibilityLabel="Your name"
+        accessibilityLabel={t("name.label")}
         value={name}
         onChangeText={(value) => {
           setName(value);
           setError(null);
         }}
-        placeholder="Your name"
+        placeholder={t("name.placeholder")}
         placeholderTextColor={city.quiet}
         autoFocus
         autoCapitalize="words"
@@ -105,7 +108,7 @@ export default function NameScreen() {
         </CityText>
       ) : null}
       <View style={{ marginTop: 24 }}>
-        <DarkButton label={saving ? "Saving" : "Continue"} disabled={!ready || saving} onPress={() => void save()} />
+        <DarkButton label={saving ? t("name.saving") : t("name.continue")} disabled={!ready || saving} onPress={() => void save()} />
       </View>
     </View>
   );

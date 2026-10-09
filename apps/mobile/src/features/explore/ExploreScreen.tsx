@@ -1,4 +1,5 @@
 import { classifyGuideRequest } from "@atlas/contracts";
+import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Image, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
@@ -9,10 +10,12 @@ import { SearchBar } from "../city/search-bar";
 import { categoryArt } from "../city/category-art";
 import { color, font, fontScaleCap, space } from "../city/theme";
 import { browseCategories, popularSearches } from "../discovery/browse";
+import { catalogName, ideaName } from "../i18n/labels";
 import { useDiscoveryLocation } from "../location/location-store";
 import { useHome } from "../home/useHome";
 
 export function ExploreScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -39,41 +42,41 @@ export function ExploreScreen() {
       >
         <View style={{ gap: space[8] }}>
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} accessibilityRole="header" style={[font.display, { color: color.primaryText }]}>
-            Explore
+            {t("explore.title")}
           </Text>
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, { color: color.secondaryText }]}>
-            {place ? `Ideas for ${place}.` : "Choose a city to see ideas."}
+            {place ? t("explore.ideasFor", { city: place }) : t("explore.choose")}
           </Text>
         </View>
-        <SearchBar value="" editable={false} placeholder="Search the city" accessibilityLabel="Search" onPress={() => router.push("/search")} />
+        <SearchBar value="" editable={false} placeholder={t("explore.search")} accessibilityLabel={t("search.label")} onPress={() => router.push("/search")} />
 
         <View style={{ gap: space[12] }}>
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.h2, { color: color.primaryText }]}>
-            Ideas
+            {t("explore.ideas")}
           </Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[12] }}>
             {popularSearches.map((item) => (
-              <PictureTile key={item} label={item} width={tile} onPress={() => search(item)} />
+              <PictureTile key={item} art={item} label={ideaName(item, t)} width={tile} onPress={() => search(item)} />
             ))}
           </View>
         </View>
 
         <View style={{ gap: space[12] }}>
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.h2, { color: color.primaryText }]}>
-            Categories
+            {t("explore.categories")}
           </Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[12] }}>
             {browseCategories.map((item) => (
-              <PictureTile key={item.id} label={item.label} width={tile} onPress={() => search(item.query)} />
+              <PictureTile key={item.id} art={item.label} label={catalogName(item.label, t)} width={tile} onPress={() => search(item.query)} />
             ))}
           </View>
         </View>
 
         <View style={{ gap: space[8] }}>
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.caption, { color: color.mutedText, letterSpacing: 1.1 }]}>
-            NEIGHBORHOODS
+            {t("explore.neighborhoods").toLocaleUpperCase()}
           </Text>
-          <DiscoveryRow label="Search a neighborhood" onPress={() => router.push("/search")} />
+          <DiscoveryRow label={t("explore.neighborhood")} onPress={() => router.push("/search")} />
         </View>
       </ScrollView>
       <GuideFab from="Explore" />
@@ -81,10 +84,10 @@ export function ExploreScreen() {
   );
 }
 
-function PictureTile({ label, width, onPress }: { label: string; width: number; onPress: () => void }) {
+function PictureTile({ art, label, width, onPress }: { art: string; label: string; width: number; onPress: () => void }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={{ width, height: 120, borderRadius: 18, overflow: "hidden" }}>
-      <Image source={categoryArt(label)} resizeMode="cover" style={{ width: "100%", height: "100%" }} />
+      <Image source={categoryArt(art)} resizeMode="cover" style={{ width: "100%", height: "100%" }} />
       <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: "rgba(28,25,23,0.45)" }}>
         <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} numberOfLines={2} style={[font.label, { color: color.onAccent }]}>
           {label}
