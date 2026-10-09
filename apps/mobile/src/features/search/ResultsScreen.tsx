@@ -1,4 +1,5 @@
 import { buildResultFilters, removeFilterPhrase, type ResultFilter, type SearchResult } from "@atlas/contracts";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { leave } from "../nav/leave";
@@ -18,9 +19,11 @@ import { ListSkeleton } from "../city/skeleton";
 import { color, font, fontScaleCap, space } from "../city/theme";
 import { friendlyError } from "../../lib/errors";
 import { loadSaves, readSaveList } from "../saved/save-list";
+import { appSentence, catalogName, englishQuery, filterName } from "../i18n/labels";
 import { useSearch } from "./useSearch";
 
 export function ResultsScreen() {
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ q?: string; plan?: string; slot?: string }>();
@@ -42,9 +45,9 @@ export function ResultsScreen() {
 
   useEffect(() => {
     setQuery(initial);
-    setDraft(initial);
+    setDraft(catalogName(initial, t));
     setPhrases([]);
-  }, [initial]);
+  }, [initial, i18n.language, t]);
 
   useEffect(() => {
     if (apiQuery) search.mutate(apiQuery);
@@ -78,7 +81,7 @@ export function ResultsScreen() {
       setPhrases((current) => current.filter((item) => item.toLowerCase() !== phrase.toLowerCase()));
       const next = removeFilterPhrase(query, phrase);
       setQuery(next);
-      setDraft(next);
+      setDraft(catalogName(next, t));
       return;
     }
     setPhrases((current) => (current.some((item) => item.toLowerCase() === phrase.toLowerCase()) ? current : [...current, phrase]));
@@ -106,17 +109,17 @@ export function ResultsScreen() {
       <StatusBar style="dark" />
       <View style={{ paddingTop: insets.top + space[8], paddingHorizontal: space.page, gap: space[12] }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[4] }}>
-          <IconButton label="Back" icon="chevron-back" onPress={() => leave(router, "/search")} />
+          <IconButton label={t("common.back")} icon="chevron-back" onPress={() => leave(router, "/search")} />
           <View style={{ flex: 1 }}>
             <SearchBar
               value={draft}
               onChangeText={setDraft}
-              placeholder="Search"
-              accessibilityLabel="Edit search"
+              placeholder={t("search.label")}
+              accessibilityLabel={t("search.edit")}
               onSubmit={() => {
-                const next = draft.trim();
-                setDraft(next);
+                const next = englishQuery(draft.trim(), t);
                 setQuery(next);
+                setDraft(catalogName(next, t));
               }}
             />
           </View>
@@ -130,7 +133,7 @@ export function ResultsScreen() {
           {filters.map((filter) => (
             <CityChip
               key={filter.key}
-              label={filter.label.replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())}
+              label={filterName(filter.label.replace(/(^|\s)\S/g, (letter) => letter.toUpperCase()), t)}
               variant={filter.group === "ranking" || filter.group === "distance" ? "category" : "filter"}
               selected={filter.selected}
               onPress={() => applyFilter(filter)}
@@ -140,7 +143,7 @@ export function ResultsScreen() {
       </View>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space.page, gap: space[12], paddingBottom: insets.bottom + 150 }}>
         {waiting ? <ListSkeleton /> : null}
-        {search.isError ? <EmptyState title="Search didn't finish" body={friendlyError(search.error)} action="Try again" onAction={() => search.mutate(apiQuery)} /> : null}
+        {search.isError ? <EmptyState title={t("search.unfinished")} body={friendlyError(search.error)} action={t("common.tryAgain")} onAction={() => search.mutate(apiQuery)} /> : null}
         {saveError ? (
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.error }]}>
             {saveError}
@@ -148,17 +151,17 @@ export function ResultsScreen() {
         ) : null}
         {notices.map((notice) => (
           <Text key={notice.code} allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.bodySmall, { color: color.secondaryText }]}>
-            {notice.message}
+            {appSentence(notice.message, t)}
           </Text>
         ))}
         {!waiting && !search.isError && apiQuery.length === 0 ? (
-          <EmptyState title="Search the city" body="Try a place, a meal, or a kind of evening." action="Edit search" onAction={() => router.push("/search")} />
+          <EmptyState title={t("search.emptyTitle")} body={t("search.emptyBody")} action={t("search.edit")} onAction={() => router.push("/search")} />
         ) : null}
         {!waiting && !search.isError && apiQuery.length > 0 && results.length === 0 && !notices.some((notice) => notice.code === "GUIDE_HOLD" || notice.code === "HOURS_UNKNOWN") ? (
           <EmptyState
-            title="Nothing matched"
-            body={`No published places matched “${query.trim() || apiQuery}”. Change the words, or take a filter off.`}
-            action="Edit search"
+            title={t("search.none")}
+            body={t("search.noneBody", { query: catalogName(query.trim() || apiQuery, t) })}
+            action={t("search.edit")}
             onAction={() => router.push("/search")}
           />
         ) : null}

@@ -1,4 +1,5 @@
 import type { TripDetail } from "@atlas/contracts";
+import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -9,10 +10,12 @@ import { apiRequest } from "../../api/client";
 import { CityText, EmptyState } from "../city/chrome";
 import { city, cityRadius, citySpace, serif } from "../city/theme";
 import { friendlyError } from "../../lib/errors";
+import { partHint, partLabel, placeCount } from "../i18n/labels";
 import { civilParts, dayParts } from "./trip-list";
 import { leave } from "../nav/leave";
 
 export function TripDetailScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,7 +36,7 @@ export function TripDetailScreen() {
   if (trip.isError || !trip.data) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
-        <EmptyState title="This plan didn't load" body={friendlyError(trip.error)} action="Back" onAction={() => leave(router, "/trips")} />
+        <EmptyState title={t("plans.failed")} body={friendlyError(trip.error)} action={t("common.back")} onAction={() => leave(router, "/trips")} />
       </View>
     );
   }
@@ -41,13 +44,14 @@ export function TripDetailScreen() {
   const plan = trip.data;
   const date = civilParts(plan.startsOn);
   const places = plan.days.flatMap((day) => day.items);
-  const countLabel = places.length === 1 ? "1 place" : `${places.length} places`;
+  const countLabel = placeCount(places.length, t);
+  const end = civilParts(plan.endsOn);
 
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 48, paddingHorizontal: citySpace.page }} showsVerticalScrollIndicator={false}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/trips")} style={styles.back}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("common.back")} onPress={() => leave(router, "/trips")} style={styles.back}>
           <Ionicons name="chevron-back" size={24} color={city.ink} />
         </Pressable>
         <CityText size="caption" tone="quiet">
@@ -64,7 +68,7 @@ export function TripDetailScreen() {
         </View>
         <CityText size="meta" tone="quiet">
           {countLabel}
-          {plan.endsOn !== plan.startsOn ? ` · through ${civilParts(plan.endsOn).day} ${civilParts(plan.endsOn).month}` : ""}
+          {plan.endsOn !== plan.startsOn ? ` · ${t("plans.through", { day: end.day, month: end.month })}` : ""}
         </CityText>
         <View style={styles.parts}>
           {dayParts.map((part) => {
@@ -72,9 +76,9 @@ export function TripDetailScreen() {
             return (
               <View key={part.id} style={styles.part}>
                 <View style={styles.partHead}>
-                  <CityText size="section">{part.label}</CityText>
+                  <CityText size="section">{partLabel(part.id, t)}</CityText>
                   <CityText size="meta" tone="quiet">
-                    {items.length === 0 ? part.hint : items.length === 1 ? "1 place" : `${items.length} places`}
+                    {items.length === 0 ? partHint(part.id, t) : placeCount(items.length, t)}
                   </CityText>
                 </View>
                 {items.map((item, index) => (
@@ -103,7 +107,7 @@ export function TripDetailScreen() {
                 ))}
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Add a ${part.label.toLowerCase()} place`}
+                  accessibilityLabel={t("plans.addPart", { part: partLabel(part.id, t).toLocaleLowerCase() })}
                   onPress={() =>
                     router.push({
                       pathname: "/results",
@@ -115,7 +119,7 @@ export function TripDetailScreen() {
                   <View style={styles.plus}>
                     <Ionicons name="add" size={16} color={city.ink} />
                   </View>
-                  <CityText size="meta">Add a place</CityText>
+                  <CityText size="meta">{t("plans.addPlace")}</CityText>
                 </Pressable>
               </View>
             );

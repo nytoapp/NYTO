@@ -1,4 +1,6 @@
 import type { SearchResult, TripDetail } from "@atlas/contracts";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { leave } from "../nav/leave";
@@ -10,6 +12,7 @@ import { apiRequest } from "../../api/client";
 import { useSession } from "../auth/useSession";
 import { CityText, DarkButton } from "../city/chrome";
 import { categoryArt } from "../city/category-art";
+import { catalogName } from "../i18n/labels";
 import { isCatalogId } from "../city/format";
 import { CompactPlaceCard, placeCardFromResult } from "../city/place-card";
 import { city, citySpace } from "../city/theme";
@@ -37,11 +40,28 @@ const moodQuery: Record<string, string> = {
 };
 
 const orderNotes = ["First", "Then", "Later"];
+const orderKeys = ["evening.first", "evening.then", "evening.later"] as const;
+const moodKey: Record<string, string> = {
+  food: "interests.food",
+  music: "interests.music",
+  drinks: "evening.drinks",
+  culture: "interests.culture",
+  social: "evening.social",
+  surprise: "interests.surprise",
+};
+const whenKey: Record<string, string> = { Tonight: "evening.tonight", "This weekend": "evening.weekend" };
+const companyKey: Record<string, string> = { Myself: "evening.myself", Partner: "evening.partner", Friends: "evening.friends", Family: "evening.family" };
+
+function named(table: Record<string, string>, value: string, t: TFunction): string {
+  const key = table[value];
+  return key ? t(key) : value;
+}
 const slots = ["dinner", "night", "unscheduled"] as const;
 
 type EveningPlan = { mood: string; when: string; withWhom: string; query: string };
 
 export function EveningScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -88,7 +108,7 @@ export function EveningScreen() {
       }),
     });
     if (created.error || !created.data?.id) {
-      setSaveError(created.error?.message ?? "The evening could not be saved.");
+      setSaveError(created.error?.message ?? t("evening.saveFailed"));
       setSaving(false);
       return;
     }
@@ -118,22 +138,22 @@ export function EveningScreen() {
     <View style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 28, paddingHorizontal: citySpace.page }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/")} style={styles.back}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("common.back")} onPress={() => leave(router, "/")} style={styles.back}>
           <Ionicons name="chevron-back" size={24} color={city.ink} />
         </Pressable>
-        <CityText size="display">Build my evening</CityText>
+        <CityText size="display">{t("evening.title")}</CityText>
         <CityText size="section" style={styles.ask}>
-          What are you feeling?
+          {t("evening.feeling")}
         </CityText>
         <View style={styles.grid}>
           {moods.map((item) => {
             const on = mood === item.id;
             return (
-              <Pressable key={item.id} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={item.label} onPress={() => setMood(item.id)} style={[styles.mood, { width: tile, height: tile }, on && styles.on]}>
+              <Pressable key={item.id} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={named(moodKey, item.id, t)} onPress={() => setMood(item.id)} style={[styles.mood, { width: tile, height: tile }, on && styles.on]}>
                 <Image source={categoryArt(item.label)} resizeMode="cover" style={StyleSheet.absoluteFill} />
                 <View style={styles.moodShade}>
                   <CityText size="meta" tone="onDark">
-                    {item.label}
+                    {named(moodKey, item.id, t)}
                   </CityText>
                 </View>
               </Pressable>
@@ -141,23 +161,23 @@ export function EveningScreen() {
           })}
         </View>
         <CityText size="section" style={styles.ask}>
-          When?
+          {t("evening.when")}
         </CityText>
         <View style={styles.row}>
           {whens.map((item) => (
-            <Choice key={item} label={item} on={when === item} onPress={() => setWhen(item)} />
+            <Choice key={item} label={named(whenKey, item, t)} on={when === item} onPress={() => setWhen(item)} />
           ))}
         </View>
         <CityText size="section" style={styles.ask}>
-          With?
+          {t("evening.with")}
         </CityText>
         <View style={styles.row}>
           {company.map((item) => (
-            <Choice key={item} label={item} on={withWhom === item} onPress={() => setWithWhom(item)} />
+            <Choice key={item} label={named(companyKey, item, t)} on={withWhom === item} onPress={() => setWithWhom(item)} />
           ))}
         </View>
         <View style={styles.cta}>
-          <DarkButton label={search.isPending ? "Finding places" : "Show me"} disabled={search.isPending} onPress={show} />
+          <DarkButton label={search.isPending ? t("evening.finding") : t("evening.show")} disabled={search.isPending} onPress={show} />
         </View>
         {plan ? (
           <PlanResult
@@ -166,7 +186,7 @@ export function EveningScreen() {
             failed={search.isError}
             signedIn={signedIn}
             results={Array.isArray(search.data?.data?.results) ? search.data.data.results : []}
-            city={selected?.label ?? search.data?.data?.locationLabel ?? "this city"}
+            city={selected?.label ?? search.data?.data?.locationLabel ?? t("evening.thisCity")}
             saving={saving}
             saveError={saveError}
             onOpen={(id) => router.push(`/subject/${id}`)}
@@ -204,33 +224,34 @@ function PlanResult({
   onRetry: () => void;
   onSave: (places: SearchResult[]) => void;
 }) {
-  const moodLabel = moods.find((item) => item.id === plan.mood)?.label ?? "Evening";
+  const { t } = useTranslation();
+  const moodLabel = named(moodKey, plan.mood, t);
   const picks = results.filter((place) => isCatalogId(place.id)).slice(0, 3);
   return (
     <View style={styles.result}>
       <CityText size="caption" tone="quiet">
-        {`${moodLabel} · ${plan.when} · ${plan.withWhom}`.toUpperCase()}
+        {`${moodLabel} · ${named(whenKey, plan.when, t)} · ${named(companyKey, plan.withWhom, t)}`.toLocaleUpperCase()}
       </CityText>
-      {pending ? <CityText tone="muted">Finding places in {city}.</CityText> : null}
+      {pending ? <CityText tone="muted">{t("evening.findingIn", { city })}</CityText> : null}
       {failed ? (
         <>
-          <CityText>Those places didn't load.</CityText>
-          <DarkButton label="Try again" onPress={onRetry} />
+          <CityText>{t("evening.failed")}</CityText>
+          <DarkButton label={t("common.tryAgain")} onPress={onRetry} />
         </>
       ) : null}
-      {!pending && !failed && picks.length === 0 ? <CityText tone="muted">Nothing published matches {plan.query} in {city} yet.</CityText> : null}
+      {!pending && !failed && picks.length === 0 ? <CityText tone="muted">{t("evening.none", { query: catalogName(plan.query, t), city })}</CityText> : null}
       {!pending && !failed && picks.length > 0 ? (
         <>
-          <CityText tone="muted">An order from places already in {city}. Opening hours are not in CITYDAY, so nothing here is booked.</CityText>
+          <CityText tone="muted">{t("evening.order", { city })}</CityText>
           {picks.map((place, index) => (
             <View key={place.id} style={{ gap: 6 }}>
               <CityText size="caption" tone="quiet">
-                {(orderNotes[index] ?? "Later").toUpperCase()}
+                {t(orderKeys[index] ?? "evening.later").toLocaleUpperCase()}
               </CityText>
               <CompactPlaceCard place={placeCardFromResult(place)} onPress={() => onOpen(place.id)} />
             </View>
           ))}
-          <DarkButton label={saving ? "Saving" : signedIn ? "Save this evening" : "Log in to save this evening"} disabled={saving} onPress={() => onSave(picks)} />
+          <DarkButton label={saving ? t("evening.saving") : signedIn ? t("evening.save") : t("evening.login")} disabled={saving} onPress={() => onSave(picks)} />
         </>
       ) : null}
       {saveError ? <CityText tone="muted">{saveError}</CityText> : null}

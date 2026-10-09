@@ -1,6 +1,7 @@
 import type { SearchResult } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { leave } from "../nav/leave";
 import { useEffect, useMemo } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -16,6 +17,7 @@ import { fitMap, pinOffset, TileMap } from "./tile-map";
 import { useState } from "react";
 
 export function MapScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -47,23 +49,23 @@ export function MapScreen() {
             ))
           : null}
         <View style={styles.searchPill}>
-          <CityText size="meta">{search.data?.data?.locationLabel || "Choose a city"}</CityText>
+          <CityText size="meta">{search.data?.data?.locationLabel || t("home.chooseCity")}</CityText>
           <CityText size="caption" tone="quiet">
             © OpenStreetMap © CARTO
           </CityText>
         </View>
         {search.isError ? (
           <View style={styles.empty}>
-            <EmptyState title="Couldn't load the map" body="We couldn't retrieve places for this map right now." action="Try again" onAction={() => search.mutate(query)} />
+            <EmptyState title={t("map.failed")} body={t("map.failedBody")} action={t("common.tryAgain")} onAction={() => search.mutate(query)} />
           </View>
         ) : null}
         {search.isSuccess && located.length === 0 ? (
           <View style={styles.empty}>
-            <EmptyState title="No mapped places" body="This search has no coordinates to pin." action="Back" onAction={() => leave(router, "/")} />
+            <EmptyState title={t("map.none")} body={t("map.noneBody")} action={t("common.back")} onAction={() => leave(router, "/")} />
           </View>
         ) : null}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/")} style={[styles.back, { top: insets.top + 12 }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={t("common.back")} onPress={() => leave(router, "/")} style={[styles.back, { top: insets.top + 12 }]}>
         <Ionicons name="chevron-back" size={22} color={city.ink} />
       </Pressable>
       {selected ? (
@@ -78,9 +80,9 @@ export function MapScreen() {
               {selected.title}
             </CityText>
             <CityText size="meta" tone="muted" numberOfLines={2}>
-              {subjectMeta(selected)}
+              {subjectMeta(selected, t)}
             </CityText>
-            {isCatalogId(selected.id) ? <DarkButton label="View" onPress={() => router.push(`/subject/${selected.id}`)} /> : null}
+            {isCatalogId(selected.id) ? <DarkButton label={t("common.view")} onPress={() => router.push(`/subject/${selected.id}`)} /> : null}
           </View>
         </View>
       ) : null}

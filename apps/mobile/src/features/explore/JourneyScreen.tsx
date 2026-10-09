@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { leave } from "../nav/leave";
 import { Pressable, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -8,28 +9,29 @@ import { city, cityRadius, citySpace } from "../city/theme";
 import { useDiscoveryLocation } from "../location/location-store";
 
 export function JourneyScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const label = useDiscoveryLocation((state) => state.selected?.label) ?? "the city you choose";
+  const label = useDiscoveryLocation((state) => state.selected?.label) ?? t("journey.city");
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 24, paddingBottom: Math.max(insets.bottom, 16) }]}>
       <StatusBar style="dark" />
       <View style={styles.body}>
-        <CityText size="display">New to {label}?</CityText>
-        <CityText tone="muted">Start with the guide that is already published for the city you are browsing.</CityText>
-        <Pressable accessibilityRole="button" accessibilityLabel="Things to do" onPress={() => router.replace({ pathname: "/results", params: { q: "things to do" } })} style={styles.option}>
-          <CityText size="section">Things to do</CityText>
+        <CityText size="display">{t("journey.new", { city: label })}</CityText>
+        <CityText tone="muted">{t("journey.body")}</CityText>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("journey.things")} onPress={() => router.replace({ pathname: "/results", params: { q: "things to do" } })} style={styles.option}>
+          <CityText size="section">{t("journey.things")}</CityText>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Food" onPress={() => router.replace({ pathname: "/results", params: { q: "food" } })} style={styles.option}>
-          <CityText size="section">Food</CityText>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("journey.food")} onPress={() => router.replace({ pathname: "/results", params: { q: "food" } })} style={styles.option}>
+          <CityText size="section">{t("journey.food")}</CityText>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Neighborhoods" onPress={() => router.replace("/search")} style={styles.option}>
-          <CityText size="section">Search a neighborhood</CityText>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("explore.neighborhood")} onPress={() => router.replace("/search")} style={styles.option}>
+          <CityText size="section">{t("explore.neighborhood")}</CityText>
         </Pressable>
         <View style={styles.flex} />
-        <DarkButton label="Start my journey" onPress={() => router.replace("/explore")} />
-        <QuietButton label="Maybe later" onPress={() => leave(router, "/")} />
+        <DarkButton label={t("journey.start")} onPress={() => router.replace("/explore")} />
+        <QuietButton label={t("journey.later")} onPress={() => leave(router, "/")} />
       </View>
     </View>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,6 +12,7 @@ import { useSession } from "../auth/useSession";
 import { IconButton, PrimaryButton } from "../city/buttons";
 import { color, font, fontScaleCap, motion, radius, space } from "../city/theme";
 import { revealApp } from "../landing/reveal";
+import { interestLabel } from "../i18n/labels";
 import { interests } from "./interests";
 import { leave } from "../nav/leave";
 import { useOnboarding } from "./store";
@@ -18,6 +20,7 @@ import { useOnboarding } from "./store";
 const gap = space[12];
 
 export function InterestsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -62,7 +65,7 @@ export function InterestsScreen() {
     void done.catch(() => {
       savingRef.current = false;
       setSaving(false);
-      setError("Your choices could not be saved. Try again.");
+      setError(t("interests.error"));
     });
   }
 
@@ -87,11 +90,11 @@ export function InterestsScreen() {
       >
         <Animated.View style={{ opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }}>
           <View style={styles.top}>
-            <IconButton label="Back" icon="chevron-back" onPress={back} />
+            <IconButton label={t("common.back")} icon="chevron-back" onPress={back} />
             {editing ? (
               <View style={styles.progress} />
             ) : (
-              <View accessibilityRole="progressbar" accessibilityLabel="Step 2 of 2" style={styles.progress}>
+              <View accessibilityRole="progressbar" accessibilityLabel={t("interests.step")} style={styles.progress}>
                 <View style={[styles.segment, styles.segmentOn]} />
                 <View style={[styles.segment, styles.segmentCurrent]} />
               </View>
@@ -99,27 +102,28 @@ export function InterestsScreen() {
             {editing ? (
               <View style={styles.skipHit} />
             ) : (
-              <Pressable accessibilityRole="button" accessibilityLabel="Skip" onPress={() => finish([])} style={styles.skipHit}>
+              <Pressable accessibilityRole="button" accessibilityLabel={t("interests.skip")} onPress={() => finish([])} style={styles.skipHit}>
                 <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.label, styles.skip]}>
-                  Skip
+                  {t("interests.skip")}
                 </Text>
               </Pressable>
             )}
           </View>
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} accessibilityRole="header" style={[font.display, styles.heading]}>
-            {editing ? "Your interests" : "What are you in the mood for?"}
+            {editing ? t("interests.yours") : t("interests.title")}
           </Text>
           <Text allowFontScaling maxFontSizeMultiplier={fontScaleCap} style={[font.body, styles.support]}>
-            {editing ? (signedIn ? "These stay with your CITYDAY account." : "These stay on this phone until you have an account.") : "Choose a few things you enjoy. This is optional."}
+            {editing ? (signedIn ? t("interests.account") : t("interests.phone")) : t("interests.support")}
           </Text>
           <View style={styles.grid}>
             {interests.map((item) => {
               const on = selected.includes(item.id);
+              const label = interestLabel(item.id, t);
               return (
                 <Pressable
                   key={item.id}
                   accessibilityRole="button"
-                  accessibilityLabel={`${item.label}, ${on ? "selected" : "not selected"}`}
+                  accessibilityLabel={`${label}, ${on ? t("interests.selected") : t("interests.notSelected")}`}
                   accessibilityState={{ selected: on }}
                   onPress={() => toggle(item.id)}
                   style={({ pressed }) => [
@@ -138,7 +142,7 @@ export function InterestsScreen() {
                   ) : null}
                   <Ionicons name={item.icon} size={18} color={color.onAccent} />
                   <Text allowFontScaling maxFontSizeMultiplier={1.15} style={[font.label, styles.label]}>
-                    {item.label}
+                    {label}
                   </Text>
                 </Pressable>
               );
@@ -152,7 +156,7 @@ export function InterestsScreen() {
             {error}
           </Text>
         ) : null}
-        <PrimaryButton label={saving ? "Saving" : editing ? "Save" : "Continue"} onPress={() => finish(selected)} disabled={saving} />
+        <PrimaryButton label={saving ? t("interests.saving") : editing ? t("interests.save") : t("interests.continue")} onPress={() => finish(selected)} disabled={saving} />
       </View>
     </View>
   );

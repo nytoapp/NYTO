@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { useState, type ReactNode } from "react";
 import { Pressable, Text, TextInput, View, type TextInputProps } from "react-native";
 import { color, font, fontScaleCap, radius, space } from "./theme";
@@ -30,6 +31,7 @@ export function SearchBar({
   returnKeyType?: TextInputProps["returnKeyType"];
   autoCapitalize?: TextInputProps["autoCapitalize"];
 }) {
+  const { t } = useTranslation();
   const label = accessibilityLabel ?? placeholder;
   const showClear = editable && value.length > 0;
   const [focused, setFocused] = useState(false);
@@ -71,7 +73,7 @@ export function SearchBar({
         </Text>
       )}
       {showClear ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={space[8]} onPress={() => onChangeText?.("")}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("common.clear")} hitSlop={space[8]} onPress={() => onChangeText?.("")}>
           <Ionicons name="close" size={18} color={color.secondaryText} />
         </Pressable>
       ) : null}

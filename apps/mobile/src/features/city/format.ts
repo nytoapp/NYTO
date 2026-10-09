@@ -1,4 +1,7 @@
 import type { ParsedIntent, SearchResult } from "@atlas/contracts";
+import type { TFunction } from "i18next";
+import { intlLocale, titleCase } from "../../i18n";
+import { catalogName, kindName } from "../i18n/labels";
 
 const zeroDecimal = new Set(["JPY", "KRW", "VND"]);
 
@@ -6,7 +9,7 @@ export function formatPrice(price: SearchResult["price"]): string | null {
   if (!price) return null;
   const major = price.amountMinor / 10 ** (zeroDecimal.has(price.currency) ? 0 : 2);
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency: price.currency, maximumFractionDigits: zeroDecimal.has(price.currency) ? 0 : 0 }).format(major);
+    return new Intl.NumberFormat(intlLocale(), { style: "currency", currency: price.currency, maximumFractionDigits: zeroDecimal.has(price.currency) ? 0 : 0 }).format(major);
   } catch {
     return null;
   }
@@ -24,8 +27,9 @@ export function kindLabel(kind: string): string {
   return kind.slice(0, 1).toUpperCase() + kind.slice(1);
 }
 
-export function subjectMeta(item: SearchResult): string {
-  return [item.category ?? kindLabel(item.kind), item.locality, formatDistance(item.distanceMeters), formatPrice(item.price)].filter(Boolean).join(" · ");
+export function subjectMeta(item: SearchResult, t: TFunction): string {
+  const category = item.category ? catalogName(item.category, t) : kindName(item.kind, t);
+  return [category, item.locality, formatDistance(item.distanceMeters), formatPrice(item.price)].filter(Boolean).join(" · ");
 }
 
 export function intentChips(intent: ParsedIntent | null): { id: string; label: string; phrase: string }[] {
@@ -52,5 +56,14 @@ export function localHour(timeZone: string | null): number {
 }
 
 export function localWeekday(timeZone: string | null): string {
-  return new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: timeZone ?? undefined }).format(new Date());
+  const locale = intlLocale();
+  const name = new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: timeZone ?? undefined }).format(new Date());
+  return titleCase(name);
+}
+
+export function weekdayName(index: number): string {
+  const date = new Date(Date.UTC(1970, 0, 4 + index));
+  const locale = intlLocale();
+  const name = new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" }).format(date);
+  return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
 }

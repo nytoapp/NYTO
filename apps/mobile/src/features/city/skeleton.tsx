@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { color, radius, space } from "./theme";
 
@@ -10,7 +11,8 @@ export function Skeleton({
   height?: number;
   round?: number;
 }) {
-  return <View accessibilityLabel="Loading" style={{ width, height, borderRadius: round, backgroundColor: color.imagePlaceholder }} />;
+  const { t } = useTranslation();
+  return <View accessibilityLabel={t("common.loading")} style={{ width, height, borderRadius: round, backgroundColor: color.imagePlaceholder }} />;
 }
 
 export function TextSkeleton({ width = "60%" }: { width?: number | `${number}%` }) {

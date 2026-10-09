@@ -1,5 +1,6 @@
 import type { DestinationResolveResponse } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { leave } from "../nav/leave";
@@ -10,8 +11,10 @@ import { apiRequest } from "../../api/client";
 import { loadSubject } from "../subject/load-subject";
 import { CityText, DarkButton, EmptyState, Photo } from "../city/chrome";
 import { city, cityRadius, citySpace } from "../city/theme";
+import { appSentence } from "../i18n/labels";
 
 export function BookingScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -27,21 +30,22 @@ export function BookingScreen() {
         method: "POST",
         body: JSON.stringify({ destinationId }),
       });
-      if (response.error || !response.data) throw new Error(response.error?.message ?? "That link is not available.");
+      if (response.error || !response.data) throw new Error(response.error?.message ?? t("book.link"));
       await Linking.openURL(response.data.preferredUrl);
     },
   });
   const place = subject.data;
   const destinationId = place?.booking.destinationId;
-  const label = place && destinationId && place.booking.capability !== "unavailable" ? place.booking.label : null;
+  const rawLabel = place && destinationId && place.booking.capability !== "unavailable" ? place.booking.label : null;
+  const label = rawLabel ? appSentence(rawLabel, t) : null;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 16) }]}>
       <StatusBar style="dark" />
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => leave(router, "/")} style={styles.back}>
+      <Pressable accessibilityRole="button" accessibilityLabel={t("common.back")} onPress={() => leave(router, "/")} style={styles.back}>
         <Ionicons name="chevron-back" size={24} color={city.ink} />
       </Pressable>
-      <CityText size="display">Continue</CityText>
+      <CityText size="display">{t("book.continue")}</CityText>
       {place ? (
         <View style={styles.venue}>
           <Photo uri={place.images[0]?.url ?? ""} style={styles.thumb} />
@@ -54,8 +58,8 @@ export function BookingScreen() {
         </View>
       ) : null}
       <View style={styles.flex} />
-      {!label ? <EmptyState title="No booking inside CITYDAY" body="This place has no outbound action yet. CITYDAY does not invent a reservation." /> : <DarkButton label={label} onPress={() => open.mutate(destinationId as string)} />}
-      {open.isError ? <CityText tone="muted">That link is not available.</CityText> : null}
+      {!label ? <EmptyState title={t("book.none")} body={t("book.noneBody")} /> : <DarkButton label={label} onPress={() => open.mutate(destinationId as string)} />}
+      {open.isError ? <CityText tone="muted">{t("book.link")}</CityText> : null}
     </View>
   );
 }

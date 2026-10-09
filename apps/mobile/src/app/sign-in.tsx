@@ -25,7 +25,7 @@ import { apiRequest, writeSession } from "../api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { loadAccount } from "../features/auth/account";
 import { pickDevicePhone } from "../features/auth/phone-hint";
-import { countryFlag, matchCountries, nationalNumber, phoneCountries, phoneReady, suggestPhoneCountry, type PhoneCountry } from "../features/auth/countries";
+import { countryFlag, countryLabel, matchCountries, nationalNumber, phoneCountries, phoneReady, suggestPhoneCountry, type PhoneCountry } from "../features/auth/countries";
 import { signInWithGoogle } from "../features/auth/google";
 import { useAuth } from "../features/auth/session";
 import { clearSignInDraft, saveSignInDraft, useSignInDraft } from "../features/auth/sign-in-draft";
@@ -385,7 +385,7 @@ export default function SignInScreen() {
                 <View style={[styles.phone, focused && styles.phoneFocused]}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={country ? `${country.name}, plus ${country.dial}. ${t("signIn.changeCountry")}` : t("signIn.chooseCountry")}
+                    accessibilityLabel={country ? `${countryLabel(country)}, +${country.dial}. ${t("signIn.changeCountry")}` : t("signIn.chooseCountry")}
                     onPress={() => setPicking(true)}
                     style={styles.country}
                   >
@@ -399,7 +399,7 @@ export default function SignInScreen() {
                   <View style={styles.phoneRule} />
                   <TextInput
                     accessibilityLabel={t("signIn.mobile")}
-                    accessibilityHint={country ? `${country.name}, +${country.dial}` : t("signIn.numberHint")}
+                    accessibilityHint={country ? `${countryLabel(country)}, +${country.dial}` : t("signIn.numberHint")}
                     value={national}
                     onChangeText={(value) => {
                       const next = country ? digitsFor(country, value) : value.replace(/\D/g, "");
@@ -414,7 +414,7 @@ export default function SignInScreen() {
                     }}
                     onBlur={() => {
                       setFocused(false);
-                      if (country && national.length > 0 && !phoneReady(country, national)) setFieldNote(t("signIn.numberFor", { country: country.name }));
+                      if (country && national.length > 0 && !phoneReady(country, national)) setFieldNote(t("signIn.numberFor", { country: countryLabel(country) }));
                     }}
                     placeholder={t("signIn.mobile")}
                     placeholderTextColor={quiet}
@@ -567,7 +567,7 @@ export default function SignInScreen() {
               <Pressable
                 key={item.iso}
                 accessibilityRole="button"
-                accessibilityLabel={`${item.name}, plus ${item.dial}`}
+                accessibilityLabel={`${countryLabel(item)}, +${item.dial}`}
                 accessibilityState={{ selected: country?.iso === item.iso }}
                 onPress={() => {
                   countryRef.current = item;
@@ -585,7 +585,7 @@ export default function SignInScreen() {
                   {countryFlag(item.iso)}
                 </Text>
                 <Text allowFontScaling style={styles.countryName}>
-                  {item.name}
+                  {countryLabel(item)}
                 </Text>
                 <Text allowFontScaling style={styles.dial}>
                   +{item.dial}

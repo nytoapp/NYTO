@@ -1,3 +1,5 @@
+import { intlLocale } from "../../i18n";
+
 export type PhoneCountry = {
   iso: string;
   name: string;
@@ -89,8 +91,18 @@ export function phoneReady(country: PhoneCountry, national: string): boolean {
   return national.length >= country.min && national.length <= country.max;
 }
 
+export function countryLabel(country: PhoneCountry): string {
+  try {
+    const label = new Intl.DisplayNames([intlLocale()], { type: "region" }).of(country.iso);
+    if (label && label.toUpperCase() !== country.iso) return label;
+  } catch {
+    return country.name;
+  }
+  return country.name;
+}
+
 export function matchCountries(query: string): PhoneCountry[] {
   const needle = query.trim().toLowerCase().replace(/^\+/, "");
   if (!needle) return phoneCountries;
-  return phoneCountries.filter((country) => `${country.name} ${country.iso} ${country.dial}`.toLowerCase().includes(needle));
+  return phoneCountries.filter((country) => `${country.name} ${countryLabel(country)} ${country.iso} ${country.dial}`.toLowerCase().includes(needle));
 }

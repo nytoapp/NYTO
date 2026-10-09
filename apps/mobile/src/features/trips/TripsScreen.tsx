@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -11,9 +12,11 @@ import { ListSkeleton } from "../city/skeleton";
 import { city, cityRadius, citySpace, serif } from "../city/theme";
 import { useSession } from "../auth/useSession";
 import { useDiscoveryLocation } from "../location/location-store";
+import { partLabel, placeCount } from "../i18n/labels";
 import { civilDateInZone, civilParts, dayParts, loadTrips, readTripList, stopsForPart, type TripRow } from "./trip-list";
 
 export function TripsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signedIn, restoring } = useSession();
@@ -26,9 +29,9 @@ export function TripsScreen() {
     queryFn: loadTrips,
   });
   const plans = readTripList(trips.data);
-  const exploreLabel = selected ? `Explore ${selected.label}` : "Choose a city";
+  const exploreLabel = selected ? t("plans.exploreCity", { city: selected.label }) : t("plans.chooseCity");
   const todayPlan = selected ? plans.find((trip) => trip.status === "current" && trip.destinationLabel === selected.label) : undefined;
-  const startLabel = !selected ? "Choose a city" : todayPlan ? "Open today's plan" : `Start today in ${selected.label}`;
+  const startLabel = !selected ? t("plans.chooseCity") : todayPlan ? t("plans.openToday") : t("plans.startToday", { city: selected.label });
   const loading = restoring || (signedIn && (trips.isLoading || (!trips.isSuccess && !trips.isError)));
   const failed = signedIn && trips.isError;
   const empty = signedIn && trips.isSuccess && plans.length === 0 && !loading;
@@ -54,7 +57,7 @@ export function TripsScreen() {
     });
     setOpening(null);
     if (response.error || !response.data?.id) {
-      setCreateError(response.error?.message ?? "The plan could not be started.");
+      setCreateError(response.error?.message ?? t("plans.couldNotStart"));
       return;
     }
     await trips.refetch();
@@ -66,14 +69,14 @@ export function TripsScreen() {
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
         <View style={styles.pad}>
-          <CityText size="display">Plans</CityText>
-          <CityText tone="muted">One day in a city. Today, or a day you are still looking forward to.</CityText>
+          <CityText size="display">{t("plans.title")}</CityText>
+          <CityText tone="muted">{t("plans.subtitle")}</CityText>
         </View>
         {!restoring && !signedIn ? (
           <EmptyState
-            title="Your plans live here"
-            body="Log in to keep the days you are putting together."
-            action="Log in"
+            title={t("plans.guestTitle")}
+            body={t("plans.guestBody")}
+            action={t("signIn.login")}
             onAction={() => router.push({ pathname: "/sign-in", params: { mode: "login" } })}
             secondary={exploreLabel}
             onSecondary={() => router.push(selected ? "/explore" : "/city")}
@@ -85,20 +88,20 @@ export function TripsScreen() {
           </View>
         ) : null}
         {failed && !loading ? (
-          <EmptyState title="Couldn't load your plans" body="We couldn't retrieve your plans right now." action="Try again" onAction={() => void trips.refetch()} />
+          <EmptyState title={t("plans.loadFailed")} body={t("plans.loadFailedBody")} action={t("common.tryAgain")} onAction={() => void trips.refetch()} />
         ) : null}
-        {empty ? <EmptyState title="No plans yet" body="Start with today. The next few days are under it, when you want them." action={startLabel} onAction={() => void openDay(selected ? civilDateInZone(selected.timezone, 0) : "")} /> : null}
+        {empty ? <EmptyState title={t("plans.empty")} body={t("plans.emptyBody")} action={startLabel} onAction={() => void openDay(selected ? civilDateInZone(selected.timezone, 0) : "")} /> : null}
         {loaded ? (
           <>
-            <DayGroup title="Today" trips={plans.filter((trip) => trip.status === "current")} onOpen={(id) => router.push(`/trip/${id}`)} />
-            <DayGroup title="Coming up" trips={plans.filter((trip) => trip.status === "upcoming" && trip.itemCount > 0)} onOpen={(id) => router.push(`/trip/${id}`)} />
-            <DayGroup title="Earlier" trips={plans.filter((trip) => trip.status === "past" && trip.itemCount > 0)} onOpen={(id) => router.push(`/trip/${id}`)} />
+            <DayGroup title={t("plans.today")} trips={plans.filter((trip) => trip.status === "current")} onOpen={(id) => router.push(`/trip/${id}`)} />
+            <DayGroup title={t("plans.comingUp")} trips={plans.filter((trip) => trip.status === "upcoming" && trip.itemCount > 0)} onOpen={(id) => router.push(`/trip/${id}`)} />
+            <DayGroup title={t("plans.earlier")} trips={plans.filter((trip) => trip.status === "past" && trip.itemCount > 0)} onOpen={(id) => router.push(`/trip/${id}`)} />
           </>
         ) : null}
         {signedIn && selected && !loading && !failed && comingDays.length > 0 ? (
           <View style={styles.later}>
-            <CityText size="section">Coming days</CityText>
-            <CityText tone="muted">Tap a day to put places on it.</CityText>
+            <CityText size="section">{t("plans.comingDays")}</CityText>
+            <CityText tone="muted">{t("plans.comingHint")}</CityText>
             {comingDays.map((day) => {
               const date = civilParts(day.iso);
               return (
@@ -117,7 +120,7 @@ export function TripsScreen() {
                     <CityText size="section">{date.weekday}</CityText>
                     <CityText size="meta" tone="muted">
                       {date.month}
-                      {opening === day.iso ? " · Starting" : ""}
+                      {opening === day.iso ? ` · ${t("plans.starting")}` : ""}
                     </CityText>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={city.quiet} />
@@ -166,6 +169,7 @@ function DayGroup({ title, trips, onOpen }: { title: string; trips: TripRow[]; o
 }
 
 function DayCard({ trip, onPress }: { trip: TripRow; onPress: () => void }) {
+  const { t } = useTranslation();
   const date = civilParts(trip.startsOn);
   const count = trip.itemCount;
   const filled = dayParts
@@ -188,7 +192,7 @@ function DayCard({ trip, onPress }: { trip: TripRow; onPress: () => void }) {
         <View style={styles.cardMeta}>
           <CityText size="meta">{trip.destinationLabel}</CityText>
           <CityText size="meta" tone="quiet">
-            {count === 1 ? "1 place" : `${count} places`}
+            {placeCount(count, t)}
           </CityText>
         </View>
       </View>
@@ -200,7 +204,7 @@ function DayCard({ trip, onPress }: { trip: TripRow; onPress: () => void }) {
           return (
             <View key={part.id} style={styles.part}>
               <CityText size="meta" tone="quiet">
-                {part.label}
+                {partLabel(part.id, t)}
               </CityText>
               {shown.map((name, index) => (
                 <CityText key={`${part.id}-${index}`} numberOfLines={1}>
@@ -209,7 +213,7 @@ function DayCard({ trip, onPress }: { trip: TripRow; onPress: () => void }) {
               ))}
               {rest > 0 ? (
                 <CityText size="meta" tone="quiet">
-                  +{rest} more
+                  {t("plans.more", { count: rest })}
                 </CityText>
               ) : null}
             </View>
@@ -221,6 +225,7 @@ function DayCard({ trip, onPress }: { trip: TripRow; onPress: () => void }) {
 }
 
 function QuietDay({ trip, onPress }: { trip: TripRow; onPress: () => void }) {
+  const { t } = useTranslation();
   const date = civilParts(trip.startsOn);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${trip.destinationLabel}, ${date.weekday} ${date.day} ${date.month}`} onPress={onPress} style={({ pressed }) => [styles.quiet, pressed && styles.pressed]}>
@@ -234,7 +239,7 @@ function QuietDay({ trip, onPress }: { trip: TripRow; onPress: () => void }) {
         </CityText>
       </View>
       <CityText size="meta" tone="quiet">
-        Add places
+        {t("plans.addPlaces")}
       </CityText>
     </Pressable>
   );

@@ -1,5 +1,6 @@
 import type { SearchResult } from "@atlas/contracts";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { Image, Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { categoryArt } from "./category-art";
 import { formatDistance, formatPrice, kindLabel } from "./format";
@@ -53,10 +54,11 @@ function coverShift(seed: string): number {
 }
 
 function SaveMark({ saved, onSave }: { saved: boolean; onSave: () => void }) {
+  const { t } = useTranslation();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={saved ? "Saved" : "Save"}
+      accessibilityLabel={saved ? t("common.saved") : t("common.save")}
       accessibilityState={{ selected: saved }}
       hitSlop={space[8]}
       onPress={onSave}
